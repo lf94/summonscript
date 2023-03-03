@@ -4,6 +4,7 @@ const koffi = require('koffi');
 
 let lib;
 
+// Probably have a better way to do library detection.
 try {
   lib = koffi.load('./libfive-stdlib.so');
 } catch(e) {
@@ -11,10 +12,12 @@ try {
 }
 
 module.exports.tfloat = koffi.alias("tfloat", "libfive_tree");
+
 module.exports.tvec2 = koffi.struct("tvec2", {
   x: "libfive_tree",
   y: "libfive_tree",
 });
+
 module.exports.tvec3 = koffi.struct("tvec3", {
   x: "libfive_tree",
   y: "libfive_tree",
@@ -28,70 +31,22 @@ module.exports.difference = lib.func("libfive_tree difference(libfive_tree a, li
 module.exports.offset = lib.func("libfive_tree offset(libfive_tree a, tfloat o)");
 module.exports.clearance = lib.func("libfive_tree clearance(libfive_tree a, libfive_tree b, tfloat o)");
 module.exports.shell = lib.func("libfive_tree shell(libfive_tree a, tfloat o)");
+module.exports.blend_expt = lib.func("libfive_tree blend_expt(libfive_tree a, libfive_tree b, tfloat m)");
+module.exports.blend_expt_unit = lib.func("libfive_tree blend_expt_unit(libfive_tree a, libfive_tree b, tfloat m)");
+module.exports.blend_rough = lib.func("libfive_tree blend_rough(libfive_tree a, libfive_tree b, tfloat m)");
+module.exports.blend_difference = lib.func("libfive_tree blend_difference(libfive_tree a, libfive_tree b, tfloat m, tfloat o__0)");
+module.exports.morph = lib.func("libfive_tree morph(libfive_tree a, libfive_tree b, tfloat m)");
+module.exports.loft = lib.func("libfive_tree loft(libfive_tree a, libfive_tree b, tfloat zmin, tfloat zmax)");
+module.exports.loft_between = lib.func("libfive_tree loft_between(libfive_tree a, libfive_tree b, tvec3 lower, tvec3 upper)");
 
-/* 
-LIBFIVE_STDLIB blend_expt(
-    // Blends two shapes by the given amount using exponents
-    libfive_tree a, libfive_tree b, tfloat m);
-LIBFIVE_STDLIB blend_expt_unit(
-    // Blends two shapes by the given amount using exponents,
-    // with the blend term adjusted to produce results approximately
-    // resembling blend_rough for values between 0 and 1.
-    libfive_tree a, libfive_tree b, tfloat m);
-LIBFIVE_STDLIB blend_rough(
-    // Blends two shapes by the given amount, using a fast-but-rough
-    // CSG approximation that may not preserve gradients
-    libfive_tree a, libfive_tree b, tfloat m);
-LIBFIVE_ALIAS(blend, blend_expt_unit)
-LIBFIVE_STDLIB blend_difference(
-    // Blends the subtraction of b, with optional offset o,
-    // from a, with smoothness m
-    libfive_tree a, libfive_tree b,
-    tfloat m, tfloat o__0);
-LIBFIVE_STDLIB morph(
-    // Morphs between two shapes.
-    // m = 0 produces a, m = 1 produces b
-    libfive_tree a, libfive_tree b, tfloat m);
-LIBFIVE_STDLIB loft(
-    // Produces a blended loft between a (at zmin) and b (at zmax)
-    // a and b should be 2D shapes (i.e. invariant along the z axis)
-    libfive_tree a, libfive_tree b, tfloat zmin, tfloat zmax);
-LIBFIVE_STDLIB loft_between(
-    // Produces a blended loft between a (at lower.z) and b (at upper.z),
-    // with XY coordinates remapped to slide between lower.xy and upper.xy.
-    // a and b should be 2D shapes (i.e. invariant along the z axis)
-    libfive_tree a, libfive_tree b, tvec3 lower, tvec3 upper);
- * /
-
-/*
-
-LIBFIVE_STDLIB circle(
-    // A 2D circle with the given radius and optional center
-    tfloat r, tvec2 center__0);
-LIBFIVE_STDLIB ring(
-    // A 2D ring with the given outer/inner radii and optional center
-    tfloat ro, tfloat ri, tvec2 center__0);
-LIBFIVE_STDLIB polygon(
-    // A polygon with center-to-vertex distance r and n sides
-    tfloat r, int n, tvec2 center__0);
-LIBFIVE_STDLIB rectangle(
-    // A rectangle with the given bounding corners
-    tvec2 a, tvec2 b);
-LIBFIVE_STDLIB rounded_rectangle(
-    // A rectangle with rounded corners
-    tvec2 a, tvec2 b, tfloat r);
-LIBFIVE_STDLIB rectangle_exact(
-    // A rectangle from an exact distance field
-    tvec2 a, tvec2 b);
-LIBFIVE_STDLIB rectangle_centered_exact(
-    // An exact-field rectangle at the (optional) center
-    tvec2 size, tvec2 center__0);
-LIBFIVE_STDLIB triangle(
-    // A 2D triangle
-    tvec2 a, tvec2 b, tvec2 c);
-
-*/
-
+module.exports.circle = lib.func("libfive_tree circle(tfloat r, tvec2 center__0)");
+module.exports.ring = lib.func("libfive_tree ring(tfloat ro, tfloat ri, tvec2 center__0)");
+module.exports.polygon = lib.func("libfive_tree polygon(tfloat r, int n, tvec2 center__0)");
+module.exports.rectangle = lib.func("libfive_tree rectangle(tvec2 a, tvec2 b)");
+module.exports.rounded_rectangle = lib.func("libfive_tree rounded_rectangle(tvec2 a, tvec2 b, tfloat r)");
+module.exports.rectangle_exact = lib.func("libfive_tree rectangle_exact(tvec2 a, tvec2 b)");
+module.exports.rectangle_centered_exact = lib.func("libfive_tree rectangle_centered_exact(tvec2 size, tvec2 center__0)");
+module.exports.triangle = lib.func("libfive_tree triangle(tvec2 a, tvec2 b, tvec2 c)");
 
 module.exports.box_mitered = lib.func("libfive_tree box_mitered(tvec3 a, tvec3 b)");
 module.exports.box_mitered_centered = lib.func("libfive_tree box_mitered_centered(tvec3 size, tvec3 center)");
@@ -99,60 +54,21 @@ module.exports.box_exact = lib.func("libfive_tree box_exact(tvec3 a, tvec3 b)");
 module.exports.box_exact_centered = lib.func("libfive_tree box_exact_centered(tvec3 size, tvec3 center)");
 module.exports.rounded_box = lib.func("libfive_tree rounded_box(tvec3 a, tvec3 b, tfloat r)");
 
-/*
-/home/lee/Code/other/libfive/libfive/stdlib/libfive_stdlib.h:133.1,182.47
-LIBFIVE_STDLIB sphere(
-    // A sphere with the given radius and (optional) center
-    tfloat radius, tvec3 center__0);
-LIBFIVE_STDLIB half_space(
-    // A plane which divides the world into inside and outside, defined by its
-    // normal and a single point on the plane
-    tvec3 norm, tvec3 point__0);
-LIBFIVE_STDLIB cylinder_z(
-    // A cylinder with the given radius and height, extruded from the
-    // (optional) base position.
-    tfloat r, tfloat h, tvec3 base__0);
-LIBFIVE_ALIAS(cylinder, cylinder_z)
-LIBFIVE_STDLIB cone_ang_z(
-    // A cone defined by its slope angle, height, and (optional) base location
-    tfloat angle, tfloat height, tvec3 base__0);
-LIBFIVE_ALIAS(cone_ang, cone_ang_z)
-LIBFIVE_STDLIB cone_z(
-    // A cone defined by its radius, height, and (optional) base location
-    tfloat radius, tfloat height, tvec3 base__0);
-LIBFIVE_ALIAS(cone, cone_z)
-LIBFIVE_STDLIB pyramid_z(
-    // A pyramid defined by its base rectangle, lower Z value, and height
-    tvec2 a, tvec2 b, tfloat zmin, tfloat height);
-LIBFIVE_STDLIB torus_z(
-    // A torus with the given outer radius, inner radius, and (optional) center
-    tfloat ro, tfloat ri, tvec3 center__0);
-LIBFIVE_ALIAS(torus, torus_z)
-LIBFIVE_STDLIB gyroid(
-    // A volume-filling gyroid with the given periods and thickness
-    tvec3 period, tfloat thickness);
-LIBFIVE_STDLIB emptiness(
-    // A value which is empty everywhere
-    );
+module.exports.sphere = lib.func("libfive_tree sphere(tfloat radius, tvec3 center__0)");
+module.exports.half_space = lib.func("libfive_tree half_space(tvec3 norm, tvec3 point__0)");
+module.exports.cylinder_z = lib.func("libfive_tree cylinder_z(tfloat r, tfloat h, tvec3 base__0)");
+module.exports.cone_ang_z = lib.func("libfive_tree cone_ang_z(tfloat angle, tfloat height, tvec3 base__0)");
+module.exports.cone_z = lib.func("libfive_tree cone_z(tfloat radius, tfloat height, tvec3 base__0)");
+module.exports.pyramid_z = lib.func("libfive_tree pyramid_z(tvec2 a, tvec2 b, tfloat zmin, tfloat height)");
+module.exports.torus_z = lib.func("libfive_tree torus_z(tfloat ro, tfloat ri, tvec3 center__0)");
+module.exports.gyroid = lib.func("libfive_tree gyroid(tvec3 period, tfloat thickness)");
+module.exports.emptiness = lib.func("libfive_tree emptiness()");
 
-LIBFIVE_STDLIB array_x(
-    // Iterates a part in a 1D array
-    libfive_tree shape, int nx, tfloat dx);
-LIBFIVE_STDLIB array_xy(
-    // Iterates a part in a 2D array
-    libfive_tree shape, int nx, int ny, tvec2 delta);
-LIBFIVE_STDLIB array_xyz(
-    // Iterates a part in a 3D array
-    libfive_tree shape, int nx, int ny, int nz, tvec3 delta);
-LIBFIVE_STDLIB array_polar_z(
-    // Iterates a shape about an optional center position
-    libfive_tree shape, int n, tvec2 center__0);
-LIBFIVE_ALIAS(array_polar, array_polar_z)
-LIBFIVE_STDLIB extrude_z(
-    // Extrudes a 2D shape between zmin and zmax
-    libfive_tree t, tfloat zmin, tfloat zmax);
-*/
-
+module.exports.array_x = lib.func("libfive_tree array_x(libfive_tree shape, int nx, tfloat dx)");
+module.exports.array_xy = lib.func("libfive_tree array_xy(libfive_tree shape, int nx, int ny, tvec2 delta)");
+module.exports.array_xyz = lib.func("libfive_tree array_xyz(libfive_tree shape, int nx, int ny, int nz, tvec3 delta)");
+module.exports.array_polar_z = lib.func("libfive_tree array_polar_z(libfive_tree shape, int n, tvec2 center__0)");
+module.exports.extrude_z = lib.func("libfive_tree extrude_z(libfive_tree t, tfloat zmin, tfloat zmax)");
 
 module.exports.move = lib.func("libfive_tree move(libfive_tree t, tvec3 offset)");
 module.exports.reflect_x = lib.func("libfive_tree reflect_x(libfive_tree t, tfloat x0__0)");
@@ -165,4 +81,36 @@ module.exports.symmetric_x = lib.func("libfive_tree symmetric_x(libfive_tree t)"
 module.exports.symmetric_y = lib.func("libfive_tree symmetric_y(libfive_tree t)");
 module.exports.symmetric_z = lib.func("libfive_tree symmetric_z(libfive_tree t)");
 
-// Add a ton more transforms.
+module.exports.scale_x = lib.func("libfive_tree scale_x(libfive_tree t, tfloat sx, tfloat x0__0)");
+module.exports.scale_y = lib.func("libfive_tree scale_y( libfive_tree t, tfloat sy, tfloat y0__0)");
+module.exports.scale_z = lib.func("libfive_tree scale_z(libfive_tree t, tfloat sz, tfloat z0__0)");
+module.exports.scale_xyz = lib.func("libfive_tree scale_xyz(libfive_tree t, tvec3 s, tvec3 center__0)");
+module.exports.rotate_x = lib.func("libfive_tree rotate_x(libfive_tree t, tfloat angle, tvec3 center__0)");
+module.exports.rotate_y = lib.func("libfive_tree rotate_y(libfive_tree t, tfloat angle, tvec3 center__0)");
+module.exports.rotate_z = lib.func("libfive_tree rotate_z(libfive_tree t, tfloat angle, tvec3 center__0)");
+module.exports.taper_x_y = lib.func("libfive_tree taper_x_y(libfive_tree shape, tvec2 base, tfloat h, tfloat scale, tfloat base_scale__1)");
+module.exports.taper_xy_z = lib.func("libfive_tree taper_xy_z(libfive_tree shape, tvec3 base, tfloat height, tfloat scale, tfloat base_scale__1)");
+module.exports.shear_x_y = lib.func("libfive_tree shear_x_y(libfive_tree t, tvec2 base, tfloat height, tfloat offset, tfloat base_offset__0)");
+module.exports.repel = lib.func("libfive_tree repel(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.repel_x = lib.func("libfive_tree repel_x(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.repel_y = lib.func("libfive_tree repel_y(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.repel_z = lib.func("libfive_tree repel_z(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.repel_xy = lib.func("libfive_tree repel_xy(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.repel_yz = lib.func("libfive_tree repel_yz(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.repel_xz = lib.func("libfive_tree repel_xz(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract = lib.func("libfive_tree attract(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract_x = lib.func("libfive_tree attract_x(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract_y = lib.func("libfive_tree attract_y(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract_z = lib.func("libfive_tree attract_z(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract_xy = lib.func("libfive_tree attract_xy(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract_yz = lib.func("libfive_tree attract_yz(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.attract_xz = lib.func("libfive_tree attract_xz(libfive_tree shape, tvec3 locus, tfloat radius, tfloat exaggerate__1)");
+module.exports.revolve_y = lib.func("libfive_tree revolve_y(libfive_tree shape, tfloat x0__0)");
+module.exports.twirl_x = lib.func("libfive_tree twirl_x(libfive_tree shape, tfloat amount, tfloat radius, tvec3 center__0)");
+module.exports.twirl_axis_x = lib.func("libfive_tree twirl_axis_x(libfive_tree shape, tfloat amount, tfloat radius, tvec3 center__0)");
+module.exports.twirl_y = lib.func("libfive_tree twirl_y(libfive_tree shape, tfloat amount, tfloat radius, tvec3 center__0)");
+module.exports.twirl_axis_y = lib.func("libfive_tree twirl_axis_y(libfive_tree shape, tfloat amount, tfloat radius, tvec3 center__0)");
+module.exports.twirl_z = lib.func("libfive_tree twirl_z(libfive_tree shape, tfloat amount, tfloat radius, tvec3 center__0)");
+module.exports.twirl_axis_z = lib.func("libfive_tree twirl_axis_z(libfive_tree shape, tfloat amount, tfloat radius, tvec3 center__0)");
+
+module.exports.text = lib.func("libfive_tree text(const char* txt, tvec2 pos__0)");
