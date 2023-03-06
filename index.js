@@ -143,7 +143,7 @@ const box = {
     const b = b_ === undefined ? TVec3(0,0,0) : TVec3(...b_);
     return libfiveVal((isCentered ? box_exact_centered : box_exact)(a, b));
   },
-  smooth: (a_, b_, r, center = true) => {
+  smooth: (a_, b_, r, center = false) => {
     if (center) throw new Error("No center implemented for box.rounded!");
     const a = TVec3(...a_);
     const b = TVec3(...b_);
