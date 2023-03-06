@@ -82,7 +82,7 @@ module.exports.symmetric_y = lib.func("libfive_tree symmetric_y(libfive_tree t)"
 module.exports.symmetric_z = lib.func("libfive_tree symmetric_z(libfive_tree t)");
 
 module.exports.scale_x = lib.func("libfive_tree scale_x(libfive_tree t, tfloat sx, tfloat x0__0)");
-module.exports.scale_y = lib.func("libfive_tree scale_y( libfive_tree t, tfloat sy, tfloat y0__0)");
+module.exports.scale_y = lib.func("libfive_tree scale_y(libfive_tree t, tfloat sy, tfloat y0__0)");
 module.exports.scale_z = lib.func("libfive_tree scale_z(libfive_tree t, tfloat sz, tfloat z0__0)");
 module.exports.scale_xyz = lib.func("libfive_tree scale_xyz(libfive_tree t, tvec3 s, tvec3 center__0)");
 module.exports.rotate_x = lib.func("libfive_tree rotate_x(libfive_tree t, tfloat angle, tvec3 center__0)");
