@@ -29,30 +29,45 @@ const cutout = box.smooth(
 );
 
 const clip = {
-  xAxis: [Math.sqrt(dimensions[0]), wallThickness/2, Math.sqrt(dimensions[2])],
-  yAxis: [wallThickness/2, Math.sqrt(dimensions[1]), Math.sqrt(dimensions[2])],
+  xAxis: [Math.sqrt(dimensions[0]), wallThickness*2, Math.sqrt(dimensions[2])],
+  yAxis: [wallThickness*2, Math.sqrt(dimensions[1]), Math.sqrt(dimensions[2])],
 };
 
 const clipXAxisNear = box.exact([0,0,0], clip.xAxis, false)
   .move([(dimensions[0] - clip.xAxis[0]) / 2, wallThickness/2, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
 const clipXAxisFar = box.exact([0,0,0], clip.xAxis, false)
-  .move([(dimensions[0] - clip.xAxis[0]) / 2, dimensions[1] - wallThickness, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
+  .move([(dimensions[0] - clip.xAxis[0]) / 2, dimensions[1] - wallThickness - clip.xAxis[1]/2, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
 const clipYAxisNear = box.exact([0,0,0], clip.yAxis, false)
   .move([wallThickness/2, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
 const clipYAxisFar = box.exact([0,0,0], clip.yAxis, false)
-  .move([dimensions[0] - wallThickness, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
+  .move([dimensions[0] - wallThickness - clip.yAxis[0]/2, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
 
 const clips = clipXAxisFar.union(clipXAxisNear).union(clipYAxisFar).union(clipYAxisNear);
 
-const top = box.exact([0,0,0], [dimensions[0], dimensions[1], offset.rounding], false);
+const wallIntersectionsX = box
+  .exact([clip.xAxis[0], dimensions[1] - wallThickness, clip.xAxis[2]])
+  .move([dimensions[0]/2, dimensions[1]/2, (dimensions[2] - offset.rounding/2) - clip.yAxis[2]/2]);
+
+const wallIntersectionsY = box
+  .exact([dimensions[0] - wallThickness, clip.yAxis[1], clip.yAxis[2]])
+  .move([dimensions[0]/2, dimensions[1]/2, (dimensions[2] - offset.rounding/2) - clip.yAxis[2]/2]);
+
+const top = box.exact([0,0,0], [dimensions[0], dimensions[1], offset.rounding/2], false)
+  .move([0, 0, dimensions[2] - offset.rounding/2]);
+
+const shippingBoxTop = base.intersection(
+  top
+  .blend(clips, 8.0)
+  .intersection(
+    top.union(wallIntersectionsX.union(wallIntersectionsY))
+  )
+);
 
 const shippingBoxBottom = base
   .difference(bottomCut)
   .difference(cutout.move([0, 0, offset.rounding]))
-  .difference(top.move([0, 0, dimensions[2] - offset.rounding]))
-  .difference(clips);
+  .difference(shippingBoxTop);
 
-const shippingBoxTop = base.intersection(top.move([0, 0, dimensions[2] - offset.rounding]).union(clips))
 
 saveAsSTL(shippingBoxBottom, [[0,0,0], dimensions], 1, "shipping-box-bottom.stl");
 saveAsSTL(shippingBoxTop, [[0,0,0], dimensions], 1, "shipping-box-top.stl");
