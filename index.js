@@ -119,7 +119,7 @@ const toMeshCoords = ({ value }, region, resolution) => {
 };
 
 const saveAsSTL = ({ value }, region, resolution, filepath) => {
-  const r = toAlignedRegion3(region, resolution);
+  const r = Region3(region[0], region[1]);
   return libfive_tree_save_mesh(value, r, resolution, filepath);
 };
 
