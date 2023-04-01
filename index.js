@@ -12,7 +12,7 @@ const {
   symmetric_y, symmetric_z, reflect_x, reflect_y, reflect_z, reflect_xy, reflect_yz,
   reflect_xz, emptiness, scale_x, scale_y, scale_z, sphere, 
   scale_xyz, move, box_exact_centered, box_mitered_centered, rotate_z,   twirl_x, twirl_y, twirl_z, array_x, triangle, extrude_z, offset, cylinder_z,
-  rotate_y, rotate_x, rounded_rectangle
+  rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z
 } = require("./libfive-stdlib.js");
 
 // Our wrapper API
@@ -61,6 +61,7 @@ const libfiveVal = (value) => ({
   union: ({ value: b }) => libfiveVal(union(value, b)),
   difference: ({ value: b }) => libfiveVal(difference(value, b)),
   intersection: ({ value: b }) => libfiveVal(intersection(value, b)),
+  inverse: () => libfiveVal(inverse(value)),
   offset: (o) => libfiveVal(offset(value, Value(o).value)),
   blend: (b, m) => blend.smooth2(libfiveVal(value), b, Value(m)),
   blendDifference: (b, m) => blend.difference2(b, libfiveVal(value), Value(m)),
@@ -70,6 +71,10 @@ const libfiveVal = (value) => ({
   symmetricX: () => libfiveVal(symmetric_x(value)),
   symmetricY: () => libfiveVal(symmetric_y(value)),
   symmetricZ: () => libfiveVal(symmetric_z(value)),
+  scaleX: (amount) => libfiveVal(scale_x(value, Value(amount).value)),
+  scaleY: (amount) => libfiveVal(scale_y(value, Value(amount).value)),
+  scaleZ: (amount) => libfiveVal(scale_z(value, Value(amount).value)),
+  scaleXYZ: (xyz) => libfiveVal(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
   reflectX: (offset) => libfiveVal(reflect_x(value, Value(offset).value)),
   reflectY: (offset) => libfiveVal(reflect_y(value, Value(offset).value)),
   reflectZ: (offset) => libfiveVal(reflect_z(value, Value(offset).value)),
@@ -79,6 +84,7 @@ const libfiveVal = (value) => ({
   twirlX: (amount, radius, offset) => libfiveVal(twirl_x(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
   twirlY: (amount, radius, offset) => libfiveVal(twirl_y(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
   twirlZ: (amount, radius, offset) => libfiveVal(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
+  taperXYZ: (base, height, scale, baseScale) => libfiveVal(taper_xy_z(value, TVec3(...base), Value(height).value, Value(scale).value, Value(baseScale).value)),
   arrayX: (amount, distanceBetween) => libfiveVal(array_x(value, amount, Value(distanceBetween).value)),
   extrudeZ: (zmin, zmax) => libfiveVal(extrude_z(value, Value(zmin).value, Value(zmax).value)),
   move: (xyz) => libfiveVal(move(value, TVec3(...xyz))),
@@ -265,6 +271,7 @@ module.exports = {
   union,
   intersection,
   difference,
+  inverse,
   symmetric_x,
   symmetric_y,
   symmetric_z,
