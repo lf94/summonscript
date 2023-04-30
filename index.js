@@ -13,7 +13,7 @@ const {
   symmetric_y, symmetric_z, reflect_x, reflect_y, reflect_z, reflect_xy, reflect_yz,
   reflect_xz, emptiness, scale_x, scale_y, scale_z, sphere, 
   scale_xyz, move, rotate_z,   twirl_x, twirl_y, twirl_z, array_x, triangle, extrude_z, offset, cylinder_z,
-  rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z
+  rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z, text
 } = require("./libfive-stdlib.js");
 
 //
@@ -154,24 +154,24 @@ class LibfiveValue {
   pow(b) { return pow(this, toLibfiveValue(b)); }
   dot(b) { return dot(this, toLibfiveValue(b)); }
   fract() { return fract(this); }
-  //square: () => square(value),
-  //union: ({ value: b }) => toLibfiveValue(union(value, b)),
-  //difference: ({ value: b }) => toLibfiveValue(difference(value, b)),
-  //intersection: ({ value: b }) => toLibfiveValue(intersection(value, b)),
+  square() { return square(this); }
+  union(b) { return toLibfiveValue(union(this.value, b.value)); }
+  difference(b) { return toLibfiveValue(difference(this.value, b.value)); }
+  intersection(b) { return toLibfiveValue(intersection(this.value, b.value)); }
   //inverse: () => toLibfiveValue(inverse(value)),
   offset(o) { return this.sub(o); }
   //blend: (b, m) => blend.smooth2(toLibfiveValue(value), b, Value(m)),
   //blendDifference: (b, m) => blend.difference2(b, toLibfiveValue(value), Value(m)),
-  //rotateX: (radians) => toLibfiveValue(rotate_x(value, Value(radians).value, TVec3(0,0,0))),
-  //rotateY: (radians) => toLibfiveValue(rotate_y(value, Value(radians).value, TVec3(0,0,0))),
-  //rotateZ: (radians) => toLibfiveValue(rotate_z(value, Value(radians).value, TVec3(0,0,0))),
+  rotateX(radians) { return toLibfiveValue(rotate_x(this.value, toLibfiveTree(radians), TVec3(0,0,0))); }
+  rotateY(radians) { return toLibfiveValue(rotate_y(this.value, toLibfiveTree(radians), TVec3(0,0,0))); }
+  rotateZ(radians) { return toLibfiveValue(rotate_z(this.value, toLibfiveTree(radians), TVec3(0,0,0))); }
   //symmetricX: () => toLibfiveValue(symmetric_x(value)),
   //symmetricY: () => toLibfiveValue(symmetric_y(value)),
   //symmetricZ: () => toLibfiveValue(symmetric_z(value)),
-  //scaleX: (amount) => toLibfiveValue(scale_x(value, Value(amount).value)),
-  //scaleY: (amount) => toLibfiveValue(scale_y(value, Value(amount).value)),
-  //scaleZ: (amount) => toLibfiveValue(scale_z(value, Value(amount).value)),
-  //scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
+  scaleX(amount) { return toLibfiveValue(scale_x(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
+  scaleY(amount) { return toLibfiveValue(scale_y(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
+  scaleZ(amount) { return toLibfiveValue(scale_z(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
+  // scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
   //reflectX: (offset) => toLibfiveValue(reflect_x(value, Value(offset).value)),
   //reflectY: (offset) => toLibfiveValue(reflect_y(value, Value(offset).value)),
   //reflectZ: (offset) => toLibfiveValue(reflect_z(value, Value(offset).value)),
@@ -184,7 +184,7 @@ class LibfiveValue {
   //taperXYZ: (base, height, scale, baseScale) => toLibfiveValue(taper_xy_z(value, TVec3(...base), Value(height).value, Value(scale).value, Value(baseScale).value)),
   //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
   extrudeZ(zmin, zmax) { return toLibfiveValue(extrude_z(this.value, toLibfiveTree(zmin), toLibfiveTree(zmax))); }
-  //move: (xyz) => toLibfiveValue(move(value, TVec3(...xyz))),
+  move(xyz) { return toLibfiveValue(move(this.value, TVec3(...xyz))); }
   reify() {
     if (this.value instanceof Array) {
       return this.value.map((t) => libfive_tree_print(t.value));
@@ -277,7 +277,7 @@ const Vec2 = (x, y) => ({
   }
 });
 
-const TVec2 = (x, y) => ({ x: Value(x).value, y: Value(y).value });
+const TVec2 = (x, y) => ({ x, y });
 const TVec3 = (x, y, z) => ({ x: Value(x).value, y: Value(y).value, z: Value(z).value });
 
 const nothing = () => Value(0);
@@ -366,15 +366,38 @@ const circle = (p, d) => {
 };
 
 const box = {
-  exact(b$, r) {
+  exact(b$) {
     const p$ = [X(),Y()];
     const d$ = abs(p$).sub(b$.div(2));
     return length(max(d$, 0)).add(min(max(d$.value[0], d$.value[1]), 0));
   },
   rounded(b$, r) {
-    return this.exact(b$.sub(r)).sub(r);
+    return this.exact(b$.sub(r*2)).sub(r);
   },
 }
+
+const textFitToArea = (str_, scale, area) => {
+  const avgGlyphSize = 0.6*scale; // taken from libfive_stdlib. In the future reimpl the glyphs.
+  let strs = [];
+  let str = "";
+  let x = 0;
+  for (let c of str_) {
+     x += avgGlyphSize;
+     str += c;
+     if (x > area[0] && c === " ") {
+       strs.push(str);
+       str = "";
+       x = 0;
+     }
+  }
+  strs.push(str);
+
+  return strs.join("\n");
+};
+
+const print2d = (str) => {
+  return toLibfiveValue(text(str, TVec2(toLibfiveTree(0),toLibfiveTree(0))));
+};
 
 module.exports = {
   mm,
@@ -432,5 +455,7 @@ module.exports = {
   sqrt,
   length,
   circle,
-  box,
+  toLibfiveTree,
+  print2d,
+  textFitToArea,
 };
