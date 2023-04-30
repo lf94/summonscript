@@ -68,6 +68,7 @@ const shippingBoxBottom = base
   .difference(cutout.move([0, 0, offset.rounding]))
   .difference(shippingBoxTop);
 
+const result = shippingBoxTop;
 
-saveAsSTL(shippingBoxBottom, [[0,0,0], dimensions], 1, "shipping-box-bottom.stl");
-saveAsSTL(shippingBoxTop, [[0,0,0], dimensions], 1, "shipping-box-top.stl");
+saveAsSTL(result, [[0,0,0], dimensions], 1, "shipping-box.stl");
+//saveAsSTL(shippingBoxTop, [[0,0,0], dimensions], 1, "shipping-box-top.stl");

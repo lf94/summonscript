@@ -5,6 +5,7 @@ const {
   libfive_tree_unary, libfive_tree_const, libfive_tree_binary, libfive_tree_remap,
   libfive_tree_x, libfive_tree_y, libfive_tree_z, libfive_tree_render_mesh,
   libfive_tree_render_mesh_coords, libfive_tree_save_mesh, libfive_tree_delete,
+  libfive_tree_save_slice,
 } = require("./libfive.js");
 
 const {
@@ -15,33 +16,90 @@ const {
   rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z
 } = require("./libfive-stdlib.js");
 
+//
 // Our wrapper API
-// Define unary and binary operations
-const unary = (name) => (a) => libfiveVal(
-  libfive_tree_unary(
-    libfive_opcode_enum(name),
-    typeof a !== "number" ? a.value : libfive_tree_const(a),
-  )
-);
+// 
+// It's typical to want to avoid touching core JS prototypes, but for code CAD
+// this is pretty necessary in order to ease translating and understanding of
+// routines across different languages, like GLSL or OpenSCAD.
+// 
+const toLibfiveTree = (a) => {
+  return typeof a === "number" ? libfive_tree_const(a) : a;
+};
 
-const binary = (name) => (a) => (b) => libfiveVal(
-  libfive_tree_binary(
-    libfive_opcode_enum(name), 
-    typeof a !== "number" ? a.value : libfive_tree_const(a),
-    typeof b !== "number" ? b.value : libfive_tree_const(b),
-  )
-);
+// Wire up the unary and binary operations
+const unary = (name) => (a_) => {
+  const a = fromLibfiveValue(a_);
+
+  if (a instanceof Array) {
+    return toLibfiveValue(a.map((v) => {
+      return toLibfiveValue(libfive_tree_unary(libfive_opcode_enum(name), toLibfiveTree(fromLibfiveValue(v))));
+    }));
+  } else {
+    return toLibfiveValue(libfive_tree_unary(libfive_opcode_enum(name), toLibfiveTree(a)));
+  }
+};
+
+const binary = (name) => (a_, b_) => {
+  const a = fromLibfiveValue(a_);
+  const b = fromLibfiveValue(b_);
+
+  if (a instanceof Array && b instanceof Array) {
+    if (a.length != b.length) {
+      throw new Error("Lengths of the Array arguments must be the same.");
+    }
+
+    return toLibfiveValue(a.map((v1, idx) => {
+      return toLibfiveValue(
+        libfive_tree_binary(
+          libfive_opcode_enum(name),
+          toLibfiveTree(fromLibfiveValue(v1)),
+          toLibfiveTree(fromLibfiveValue(b[idx]))
+        )
+      );
+    }));
+  }
+
+  if (a instanceof Array) {
+    return toLibfiveValue(a.map((v1) => {
+      return toLibfiveValue(
+        libfive_tree_binary(
+          libfive_opcode_enum(name),
+          toLibfiveTree(fromLibfiveValue(v1)),
+          toLibfiveTree(b)
+        )
+      );
+    }));
+  }
+
+  if (b instanceof Array) {
+    return toLibfiveValue(b.map((v2) => {
+      return toLibfiveValue(
+        libfive_tree_binary(
+          libfive_opcode_enum(name),
+          toLibfiveTree(a),
+          toLibfiveTree(fromLibfiveValue(v2))
+        )
+      );
+    }));
+  }
+
+  return toLibfiveValue(libfive_tree_binary(libfive_opcode_enum(name), toLibfiveTree(a), toLibfiveTree(b)));
+};
 
 const add = binary("add");
 const sub = binary("sub");
 const mul = binary("mul");
 const div = binary("div");
 const mod = binary("mod");
+const pow = binary("pow");
+const compare = binary("compare");
 
 const square = unary("square");
 const neg = unary("neg");
 const abs = unary("abs");
 const sqrt = unary("sqrt");
+const sin = unary("sin");
 
 const min = binary("min");
 const max = binary("max");
@@ -50,56 +108,103 @@ const atan2 = binary("atan2");
 
 const free = ({ value }) => libfive_tree_delete(value);
 
-const libfiveVal = (value) => ({
-  value,
-  add: add({ value }),
-  sub: sub({ value }),
-  mul: mul({ value }),
-  div: div({ value }),
-  mod: mod({ value }),
-  square: () => square({ value }),
-  union: ({ value: b }) => libfiveVal(union(value, b)),
-  difference: ({ value: b }) => libfiveVal(difference(value, b)),
-  intersection: ({ value: b }) => libfiveVal(intersection(value, b)),
-  inverse: () => libfiveVal(inverse(value)),
-  offset: (o) => libfiveVal(offset(value, Value(o).value)),
-  blend: (b, m) => blend.smooth2(libfiveVal(value), b, Value(m)),
-  blendDifference: (b, m) => blend.difference2(b, libfiveVal(value), Value(m)),
-  rotateX: (radians) => libfiveVal(rotate_x(value, Value(radians).value, TVec3(0,0,0))),
-  rotateY: (radians) => libfiveVal(rotate_y(value, Value(radians).value, TVec3(0,0,0))),
-  rotateZ: (radians) => libfiveVal(rotate_z(value, Value(radians).value, TVec3(0,0,0))),
-  symmetricX: () => libfiveVal(symmetric_x(value)),
-  symmetricY: () => libfiveVal(symmetric_y(value)),
-  symmetricZ: () => libfiveVal(symmetric_z(value)),
-  scaleX: (amount) => libfiveVal(scale_x(value, Value(amount).value)),
-  scaleY: (amount) => libfiveVal(scale_y(value, Value(amount).value)),
-  scaleZ: (amount) => libfiveVal(scale_z(value, Value(amount).value)),
-  scaleXYZ: (xyz) => libfiveVal(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
-  reflectX: (offset) => libfiveVal(reflect_x(value, Value(offset).value)),
-  reflectY: (offset) => libfiveVal(reflect_y(value, Value(offset).value)),
-  reflectZ: (offset) => libfiveVal(reflect_z(value, Value(offset).value)),
-  reflectXY: () => libfiveVal(reflect_xz(value)),
-  reflectYZ: () => libfiveVal(reflect_yz(value)),
-  reflectXZ: () => libfiveVal(reflect_xz(value)),
-  twirlX: (amount, radius, offset) => libfiveVal(twirl_x(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
-  twirlY: (amount, radius, offset) => libfiveVal(twirl_y(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
-  twirlZ: (amount, radius, offset) => libfiveVal(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
-  taperXYZ: (base, height, scale, baseScale) => libfiveVal(taper_xy_z(value, TVec3(...base), Value(height).value, Value(scale).value, Value(baseScale).value)),
-  arrayX: (amount, distanceBetween) => libfiveVal(array_x(value, amount, Value(distanceBetween).value)),
-  extrudeZ: (zmin, zmax) => libfiveVal(extrude_z(value, Value(zmin).value, Value(zmax).value)),
-  move: (xyz) => libfiveVal(move(value, TVec3(...xyz))),
-  toString: () => libfive_tree_print(value),
-});
+const length = (p) => {
+  return sqrt(p[0].pow(2).add(p[1].pow(2)).add(p[2].pow(2)));
+};
 
-const X = () => libfiveVal(libfive_tree_x());
-const Y = () => libfiveVal(libfive_tree_y());
-const Z = () => libfiveVal(libfive_tree_z());
-const Value = (value) => libfiveVal(libfive_tree_const(value));
+const step = (a, b) => {
+  return max(compare(b, a).add(1), 1);
+};
+
+const toLibfiveValue = (a) => {
+  if (a instanceof LibfiveValue) return a;
+  if (a instanceof Array) {
+    return new LibfiveValue(a.map((x) => toLibfiveValue(x)));
+  }
+  return new LibfiveValue(a);
+};
+
+const fromLibfiveValue = (a_) => a_ instanceof LibfiveValue ? a_.value : a_;
+
+const dot = (a_, b_) => {
+  const as = fromLibfiveValue(a_);
+  const bs = fromLibfiveValue(b_);
+
+  const muls = as.map((a, idx) => a.mul(bs[idx]));
+  const adds = muls.reduce((acc, cur) => acc.add(cur));
+  return adds;
+};
+
+const fract = (a_) => {
+  return a_.mod(1);
+};
+
+class LibfiveValue {
+  constructor(x) {
+    this.value = x;
+  }
+  add(b) { return add(this, toLibfiveValue(b)); }
+  sub(b) { return sub(this, toLibfiveValue(b)); }
+  mul(b) { return mul(this, toLibfiveValue(b)); }
+  div(b) { return div(this, toLibfiveValue(b)); }
+  mod(b) { return mod(this, toLibfiveValue(b)); }
+  pow(b) { return pow(this, toLibfiveValue(b)); }
+  dot(b) { return dot(this, toLibfiveValue(b)); }
+  fract() { return fract(this); }
+  //square: () => square(value),
+  //union: ({ value: b }) => toLibfiveValue(union(value, b)),
+  //difference: ({ value: b }) => toLibfiveValue(difference(value, b)),
+  //intersection: ({ value: b }) => toLibfiveValue(intersection(value, b)),
+  //inverse: () => toLibfiveValue(inverse(value)),
+  //offset: (o) => toLibfiveValue(offset(value, Value(o).value)),
+  //blend: (b, m) => blend.smooth2(toLibfiveValue(value), b, Value(m)),
+  //blendDifference: (b, m) => blend.difference2(b, toLibfiveValue(value), Value(m)),
+  //rotateX: (radians) => toLibfiveValue(rotate_x(value, Value(radians).value, TVec3(0,0,0))),
+  //rotateY: (radians) => toLibfiveValue(rotate_y(value, Value(radians).value, TVec3(0,0,0))),
+  //rotateZ: (radians) => toLibfiveValue(rotate_z(value, Value(radians).value, TVec3(0,0,0))),
+  //symmetricX: () => toLibfiveValue(symmetric_x(value)),
+  //symmetricY: () => toLibfiveValue(symmetric_y(value)),
+  //symmetricZ: () => toLibfiveValue(symmetric_z(value)),
+  //scaleX: (amount) => toLibfiveValue(scale_x(value, Value(amount).value)),
+  //scaleY: (amount) => toLibfiveValue(scale_y(value, Value(amount).value)),
+  //scaleZ: (amount) => toLibfiveValue(scale_z(value, Value(amount).value)),
+  //scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
+  //reflectX: (offset) => toLibfiveValue(reflect_x(value, Value(offset).value)),
+  //reflectY: (offset) => toLibfiveValue(reflect_y(value, Value(offset).value)),
+  //reflectZ: (offset) => toLibfiveValue(reflect_z(value, Value(offset).value)),
+  //reflectXY: () => toLibfiveValue(reflect_xz(value)),
+  //reflectYZ: () => toLibfiveValue(reflect_yz(value)),
+  //reflectXZ: () => toLibfiveValue(reflect_xz(value)),
+  //twirlX: (amount, radius, offset) => toLibfiveValue(twirl_x(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
+  //twirlY: (amount, radius, offset) => toLibfiveValue(twirl_y(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
+  //twirlZ: (amount, radius, offset) => toLibfiveValue(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
+  //taperXYZ: (base, height, scale, baseScale) => toLibfiveValue(taper_xy_z(value, TVec3(...base), Value(height).value, Value(scale).value, Value(baseScale).value)),
+  //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
+  //extrudeZ(zmin, zmax) { return extrude_z(this.value, toLibfiveTree(zmin), toLibfiveTree(zmax)); }
+  //move: (xyz) => toLibfiveValue(move(value, TVec3(...xyz))),
+  reify() {
+    if (this.value instanceof Array) {
+      return this.value.map((t) => libfive_tree_print(t.value));
+    }
+
+    return libfive_tree_print(this.value);
+  }
+};
+
+const X = () => toLibfiveValue(libfive_tree_x());
+const Y = () => toLibfiveValue(libfive_tree_y());
+const Z = () => toLibfiveValue(libfive_tree_z());
+const Value = (value) => toLibfiveValue(libfive_tree_const(value));
 
 const Region3 = (min, max) => ({
   X: { lower: min[0], upper: max[0] },
   Y: { lower: min[1], upper: max[1] },
   Z: { lower: min[2], upper: max[2] },
+});
+
+const Region2 = (min, max) => ({
+  X: { lower: min[0], upper: max[0] },
+  Y: { lower: min[1], upper: max[1] },
 });
 
 const alignToResolution = (x, resolution, isUpper) => (x - (x % (1/resolution))) + ((1/resolution)*(isUpper ? 1 : -1));
@@ -125,11 +230,49 @@ const toMeshCoords = ({ value }, region, resolution) => {
 };
 
 const saveAsSTL = ({ value }, region, resolution, filepath) => {
-  const r = Region3(region[0], region[1]);
+  const r = toAlignedRegion3(region, resolution);
   return libfive_tree_save_mesh(value, r, resolution, filepath);
 };
 
+const saveAsPNG = ({ value }, region, z, resolution, filepath) => {
+  const r = Region2(region[0], region[1]);
+  return libfive_tree_save_slice(value, r, z, resolution, filepath);
+};
+
 const Vec3 = (x, y, z) => ({ x, y, z });
+const Vec2 = (x, y) => ({
+  x,
+  y,
+  dot(b/*:TVec2*/) {
+  },
+  add(b) {
+    if (typeof b.x === "number" && typeof b.y === "number") {
+      return Vec2(this.x.add(b.x), this.y.add(b.y));
+    } else {
+      return Vec2(this.x.add(b), this.y.add(b));
+    }
+  },
+  sub(b) {
+    if (typeof b.x === "number" && typeof b.y === "number") {
+      return Vec2(this.x.sub(b.x), this.y.sub(b.y));
+    } else {
+      return Vec2(this.x.sub(b), this.y.sub(b));
+    }
+  },
+  mul(b) {
+    if (typeof b.x === "number" && typeof b.y === "number") {
+      return Vec2(this.x.mul(b.x), this.y.mul(b.y));
+    } else {
+      return Vec2(this.x.mul(b), this.y.mul(b));
+    }
+  },
+  mod(b) {
+    return Vec2(this.x.mod(b), this.y.mod(b));
+  },
+  apply(fn) {
+    return Vec2(fn(this.x), fn(this.y));
+  }
+});
 
 const TVec2 = (x, y) => ({ x: Value(x).value, y: Value(y).value });
 const TVec3 = (x, y, z) => ({ x: Value(x).value, y: Value(y).value, z: Value(z).value });
@@ -176,6 +319,10 @@ const box = {
       )
     );
   },
+};
+
+const floor = (a_) => {
+  return a_.sub(a_.mod(1));
 };
 
 const clamp = (a) => (lower) => (upper) => {
@@ -262,12 +409,17 @@ module.exports = {
   sub,
   mul,
   div,
+  mod,
+  pow,
   square,
   neg,
   abs,
   sqrt,
+  sin,
+  floor,
   min,
   max,
+  step,
   union,
   intersection,
   difference,
@@ -284,16 +436,22 @@ module.exports = {
   box,
   TVec2,
   TVec3,
+  Vec2,
   Vec3,
   Region3,
   saveAsSTL,
+  saveAsPNG,
   toMesh,
   toMeshCoords,
-  libfiveVal,
   emptiness,
   ellipsoid,
   sphere: sphere_,
   atan2,
   triangle: triangle_,
   cylinder,
+  toLibfiveValue,
+  fract,
+  dot,
+  sqrt,
+  length
 };
