@@ -9,10 +9,10 @@ const {
 } = require("./libfive.js");
 
 const {
-  union, box_exact, box_mitered, difference, rounded_box, intersection, symmetric_x,
+  union, difference, intersection, symmetric_x,
   symmetric_y, symmetric_z, reflect_x, reflect_y, reflect_z, reflect_xy, reflect_yz,
   reflect_xz, emptiness, scale_x, scale_y, scale_z, sphere, 
-  scale_xyz, move, box_exact_centered, box_mitered_centered, rotate_z,   twirl_x, twirl_y, twirl_z, array_x, triangle, extrude_z, offset, cylinder_z,
+  scale_xyz, move, rotate_z,   twirl_x, twirl_y, twirl_z, array_x, triangle, extrude_z, offset, cylinder_z,
   rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z
 } = require("./libfive-stdlib.js");
 
@@ -108,8 +108,11 @@ const atan2 = binary("atan2");
 
 const free = ({ value }) => libfive_tree_delete(value);
 
-const length = (p) => {
-  return sqrt(p[0].pow(2).add(p[1].pow(2)).add(p[2].pow(2)));
+const length = (p$) => {
+  const ps = fromLibfiveValue(p$);
+  const pows$ = ps.map(($p) => $p.pow(2));
+  const adds$ = pows$.reduce(($acc, $cur) => $acc.add($cur));
+  return sqrt(adds$);
 };
 
 const step = (a, b) => {
@@ -156,7 +159,7 @@ class LibfiveValue {
   //difference: ({ value: b }) => toLibfiveValue(difference(value, b)),
   //intersection: ({ value: b }) => toLibfiveValue(intersection(value, b)),
   //inverse: () => toLibfiveValue(inverse(value)),
-  //offset: (o) => toLibfiveValue(offset(value, Value(o).value)),
+  offset(o) { return this.sub(o); }
   //blend: (b, m) => blend.smooth2(toLibfiveValue(value), b, Value(m)),
   //blendDifference: (b, m) => blend.difference2(b, toLibfiveValue(value), Value(m)),
   //rotateX: (radians) => toLibfiveValue(rotate_x(value, Value(radians).value, TVec3(0,0,0))),
@@ -180,7 +183,7 @@ class LibfiveValue {
   //twirlZ: (amount, radius, offset) => toLibfiveValue(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
   //taperXYZ: (base, height, scale, baseScale) => toLibfiveValue(taper_xy_z(value, TVec3(...base), Value(height).value, Value(scale).value, Value(baseScale).value)),
   //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
-  //extrudeZ(zmin, zmax) { return extrude_z(this.value, toLibfiveTree(zmin), toLibfiveTree(zmax)); }
+  extrudeZ(zmin, zmax) { return toLibfiveValue(extrude_z(this.value, toLibfiveTree(zmin), toLibfiveTree(zmax))); }
   //move: (xyz) => toLibfiveValue(move(value, TVec3(...xyz))),
   reify() {
     if (this.value instanceof Array) {
@@ -279,48 +282,6 @@ const TVec3 = (x, y, z) => ({ x: Value(x).value, y: Value(y).value, z: Value(z).
 
 const nothing = () => Value(0);
 
-const box = {
-  mitered: (a_, b_, center = true) => {
-    const isCentered = b_ === undefined || center;
-    const a = TVec3(...a_);
-    const b = b_ === undefined ? TVec3(0,0,0) : TVec3(...b_);
-    return libfiveVal((isCentered ? box_mitered_centered : box_mitered)(a, b));
-  },
-  exact: (a_, b_, center = true) => {
-    const isCentered = b_ === undefined || center;
-    const a = TVec3(...a_);
-    const b = b_ === undefined ? TVec3(0,0,0) : TVec3(...b_);
-    return libfiveVal((isCentered ? box_exact_centered : box_exact)(a, b));
-  },
-  smooth: (a_, b_, r, center = false) => {
-    if (center) throw new Error("No center implemented for box.rounded!");
-    const a = TVec3(...a_);
-    const b = TVec3(...b_);
-    return libfiveVal(rounded_box(a, b, Value(r).value));
-  },
-  roundedZ: (a_, b_, r_, center = true) => {
-    const isCentered = b_ === undefined || Array.isArray(b_) === false || center;
-    let a;
-    let b;
-    let r = Value(isCentered ? b_ : r).value;
-    if (isCentered) {
-      a = a_.div(-2);
-      b = b_ === undefined ? [0,0,0] : a_.div(2);
-    } else {
-      a = a_;
-      b = b_ === undefined ? [0,0,0] : b_;
-    }
-    let h = Math.abs(a[2] - b[2]);
-    return libfiveVal(
-      extrude_z(
-        rounded_rectangle(TVec2(a[0], a[1]), TVec2(b[0], b[1]), r),
-        Value(isCentered ? (h / -2) : 0).value,
-        Value(isCentered ? (h / 2) : h).value
-      )
-    );
-  },
-};
-
 const floor = (a_) => {
   return a_.sub(a_.mod(1));
 };
@@ -399,6 +360,22 @@ Array.prototype.neg = function() {
   return this.map((n) => -n);
 };
 
+// All from Inigo Iquilez. Yes your name is immortalized.
+const circle = (p, d) => {
+  return length(p).sub(d.div(2));
+};
+
+const box = {
+  exact(b$, r) {
+    const p$ = [X(),Y()];
+    const d$ = abs(p$).sub(b$.div(2));
+    return length(max(d$, 0)).add(min(max(d$.value[0], d$.value[1]), 0));
+  },
+  rounded(b$, r) {
+    return this.exact(b$.sub(r)).sub(r);
+  },
+}
+
 module.exports = {
   mm,
   cm,
@@ -453,5 +430,7 @@ module.exports = {
   fract,
   dot,
   sqrt,
-  length
+  length,
+  circle,
+  box,
 };
