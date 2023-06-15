@@ -12,8 +12,9 @@ const {
   union, difference, intersection, symmetric_x,
   symmetric_y, symmetric_z, reflect_x, reflect_y, reflect_z, reflect_xy, reflect_yz,
   reflect_xz, emptiness, scale_x, scale_y, scale_z, sphere, 
-  scale_xyz, move, rotate_z,   twirl_x, twirl_y, twirl_z, array_x, triangle, extrude_z, offset, cylinder_z,
-  rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z, text
+  scale_xyz, move, rotate_z,   twirl_x, twirl_y, twirl_z, array_x, triangle, extrude_z, offset,
+  rotate_y, rotate_x, rounded_rectangle, inverse, taper_xy_z, text,
+  shell
 } = require("./libfive-stdlib.js");
 
 //
@@ -22,6 +23,8 @@ const {
 // It's typical to want to avoid touching core JS prototypes, but for code CAD
 // this is pretty necessary in order to ease translating and understanding of
 // routines across different languages, like GLSL or OpenSCAD.
+// 
+// Tons if not all from Inigo Iquilez.
 // 
 const toLibfiveTree = (a) => {
   return typeof a === "number" ? libfive_tree_const(a) : a;
@@ -108,8 +111,8 @@ const atan2 = binary("atan2");
 
 const free = ({ value }) => libfive_tree_delete(value);
 
-const length = (p$) => {
-  const ps = fromLibfiveValue(p$);
+const length = (ps$) => {
+  const ps = fromLibfiveValue(ps$);
   const pows$ = ps.map(($p) => $p.pow(2));
   const adds$ = pows$.reduce(($acc, $cur) => $acc.add($cur));
   return sqrt(adds$);
@@ -160,7 +163,8 @@ class LibfiveValue {
   intersection(b) { return toLibfiveValue(intersection(this.value, b.value)); }
   //inverse: () => toLibfiveValue(inverse(value)),
   offset(o) { return this.sub(o); }
-  //blend: (b, m) => blend.smooth2(toLibfiveValue(value), b, Value(m)),
+  shell(o) { return toLibfiveValue(shell(this.value, toLibfiveTree(o))); }
+  blend(b, m) { return toLibfiveValue(blend.smooth(this, b, Value(m))); }
   //blendDifference: (b, m) => blend.difference2(b, toLibfiveValue(value), Value(m)),
   rotateX(radians) { return toLibfiveValue(rotate_x(this.value, toLibfiveTree(radians), TVec3(0,0,0))); }
   rotateY(radians) { return toLibfiveValue(rotate_y(this.value, toLibfiveTree(radians), TVec3(0,0,0))); }
@@ -181,7 +185,17 @@ class LibfiveValue {
   //twirlX: (amount, radius, offset) => toLibfiveValue(twirl_x(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
   //twirlY: (amount, radius, offset) => toLibfiveValue(twirl_y(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
   //twirlZ: (amount, radius, offset) => toLibfiveValue(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
-  //taperXYZ: (base, height, scale, baseScale) => toLibfiveValue(taper_xy_z(value, TVec3(...base), Value(height).value, Value(scale).value, Value(baseScale).value)),
+  taperXYZ(base, height, scale, baseScale) {
+    return toLibfiveValue(
+      taper_xy_z(
+        this.value,
+        TVec3(...base),
+        Value(height).value,
+        Value(scale).value,
+        Value(baseScale).value
+      )
+    )
+  }
   //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
   extrudeZ(zmin, zmax) { return toLibfiveValue(extrude_z(this.value, toLibfiveTree(zmin), toLibfiveTree(zmax))); }
   move(xyz) { return toLibfiveValue(move(this.value, TVec3(...xyz))); }
@@ -197,6 +211,7 @@ class LibfiveValue {
 const X = () => toLibfiveValue(libfive_tree_x());
 const Y = () => toLibfiveValue(libfive_tree_y());
 const Z = () => toLibfiveValue(libfive_tree_z());
+const XYZ = () => [X(),Y(),Z()];
 const Value = (value) => toLibfiveValue(libfive_tree_const(value));
 
 const Region3 = (min, max) => ({
@@ -246,7 +261,8 @@ const Vec3 = (x, y, z) => ({ x, y, z });
 const Vec2 = (x, y) => ({
   x,
   y,
-  dot(b/*:TVec2*/) {
+  dot(b) {
+    return dot([this.x,this.y],[b.x,b.y]);
   },
   add(b) {
     if (typeof b.x === "number" && typeof b.y === "number") {
@@ -287,21 +303,21 @@ const floor = (a_) => {
 };
 
 const clamp = (a) => (lower) => (upper) => {
-  return max(lower)(min(upper)(a));
+  return max(lower,min(upper,a));
 };
 
-const mix = (a) => (b) => (h) => {
+const mix = (a, b, h) => {
   return b.mul(h).add(a.mul(Value(1).sub(h)));
 };
 
 const blend = {
   smooth: (a, b, m) => {
-    const h = (max(m.sub(abs(a.sub(b))))(0.0)).div(m);
-    return (min(a)(b)).sub(h.mul(h).mul(m).mul(1.0/4.0));
+    const h = max(m.sub(abs(a.sub(b))), 0.0).div(m);
+    return min(a,b).sub(h.mul(h).mul(m).mul(1.0/4.0));
   },
   smooth2: (d1, d2, k) => {
     const h = clamp(Value(0.5).add(Value(0.5).mul(d2.sub(d1)).div(k)))(0.0)(1.0);
-    return mix(d2)(d1)(h).sub(k.mul(h).mul(Value(1.0).sub(h)));
+    return mix(d2,d1,h).sub(k.mul(h).mul(Value(1.0).sub(h)));
   },
   difference2: (d1, d2, k) => {
     const h = clamp(Value(0.5).sub(Value(0.5).mul(d2.add(d1)).div(k)))(0.0)(1.0);
@@ -324,8 +340,6 @@ const sphere_ = (d) => libfiveVal(sphere(Value(d/2).value, TVec3(0,0,0)));
 const triangle_ = (a, b, c) => libfiveVal(
   triangle(TVec2(...a), TVec2(...b), TVec2(...c))
 );
-
-const cylinder = (d, h) => libfiveVal(cylinder_z(Value(d/2).value, Value(h).value, TVec3(0,0,0)));
 
 const mm = 1;
 const cm = 10;
@@ -360,10 +374,48 @@ Array.prototype.neg = function() {
   return this.map((n) => -n);
 };
 
-// All from Inigo Iquilez. Yes your name is immortalized.
-const circle = (p, d) => {
+const half_space = (norm, point) => {
+    const [x,y,z] = XYZ();
+    // dot(pos - point, norm)
+    return x.sub(point[0]).mul(norm[0])
+           .add(y.sub(point[1]).mul(norm[1]))
+           .add(z.sub(point[2]).mul(norm[2]));
+};
+
+
+
+const circle = (d) => {
+  const p = XYZ();
   return length(p).sub(d.div(2));
 };
+
+const cylinder = (h, d) => {
+  const p = XYZ();
+  const n = Vec2(abs(length([p[0], p[1]])), abs(p[2])).sub(Vec2(d/2, h/2));
+  return min(max(n.x,n.y), 0.0).add(length([max(n.x,0.0), max(n.y,0.0)]));
+};
+
+const dot2 = (v) => {
+  return v.dot(v);
+};
+
+const ifelse = () => {
+  result = min_value + (max_value - min_value) * (1 - max(0, min(1, comp_result)))
+};
+
+const cone = (h, d1, d2) => {
+  const cyl = cylinder(h, d2);
+  return cyl.taperXYZ([0,0,0], h, 1, 1 + (d2/d1));
+};
+
+//  const q = Vec2(length([p[0],p[2]]), p[1]);
+//  const h1 = Vec2(d2/2, h);
+//  const k2 = Vec2(d2/2-d1/2,2.0*h);
+//  const ca = Vec2(q[0]-min(q[0],(q[1]<0.0)?r1:r2), abs(q[1])-h);
+//  const cb = q.sub(k1).add(k2.mul(clamp(dot(k1.sub(q),k2).div(dot2(k2)), 0.0, 1.0));
+//  const s = (cb[0]<0.0 && ca[1]<0.0) ? -1.0 : 1.0;
+//  return s.mul(sqrt(min(dot2(ca),dot2(cb))));
+//};
 
 const box = {
   exact(b$) {
@@ -431,6 +483,7 @@ module.exports = {
   X,
   Y,
   Z,
+  XYZ,
   Value,
   nothing,
   box,
@@ -449,6 +502,7 @@ module.exports = {
   atan2,
   triangle: triangle_,
   cylinder,
+  cone,
   toLibfiveValue,
   fract,
   dot,
@@ -458,4 +512,5 @@ module.exports = {
   toLibfiveTree,
   print2d,
   textFitToArea,
+  half_space,
 };

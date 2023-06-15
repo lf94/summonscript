@@ -2,7 +2,7 @@
 
 libfive bindings for nodejs.
 
-See https://libfive.com/ for more detalis about libfive.
+See https://libfive.com/ for more details about libfive.
 
 ## Features
 
