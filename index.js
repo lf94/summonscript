@@ -403,6 +403,7 @@ const ifelse = () => {
   result = min_value + (max_value - min_value) * (1 - max(0, min(1, comp_result)))
 };
 
+// Something weird with cone's d1 and d2. They're a ratio or something of each other.
 const cone = (h, d1, d2) => {
   const cyl = cylinder(h, d2);
   return cyl.taperXYZ([0,0,0], h, 1, 1 + (d2/d1));
