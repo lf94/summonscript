@@ -32,7 +32,7 @@ const peg =  cone(d.peg().height, d.peg().d1, d.peg().d2).rotateY(-90*deg);
 const result = base
   .union(neck.move(d.neck().xyz()), 1*mm)
   .union(neck.rotateY(180*deg).move(d.neck().xyz().mul(-1)), 1*mm)
-  .shell(-d.shell)
+  .shell(d.shell)
   .difference(cylinder((d.height+d.neck().height*2)*mm, d.wireDiameter))
   .difference(half_space([-1,0,0], [0,0,0]))
   .union(peg.move(d.peg().xyz()), 1*mm)
