@@ -269,8 +269,8 @@ const capsule = (h_, d_) => {
   const [x,y,z] = XYZ();
   const h = toLibfiveValue(h_);
   const d = toLibfiveValue(d_);
-  const yn = y.sub(clamp(y, 0.0, h));
-  return length([x,yn,z]).sub(d.div(2));
+  const zn = z.sub(clamp(z, 0.0, h));
+  return length([x,zn,y]).sub(d.div(2)).move([0,0,h_/-2]);
 };
 
 const dot2 = (v) => {
