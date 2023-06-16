@@ -35,8 +35,7 @@ const result = base
   .shell(d.shell)
   .difference(cylinder((d.height+d.neck().height*2)*mm, d.wireDiameter))
   .difference(half_space([-1,0,0], [0,0,0]))
-  .union(peg.move(d.peg().xyz()), 1*mm)
-  .union(peg.move(d.peg().xyz().mul([1, 1, -1])), 1*mm);
+  .union(peg.move(d.peg().xyz()), 1*mm);
 
 const res = 1.0;
 const region = [50,50,50];

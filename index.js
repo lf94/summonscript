@@ -161,6 +161,13 @@ const move = (shape, base_) => {
   return shape.remap(x.sub(base[0]), y.sub(base[1]), z.sub(base[2]));
 };
 
+const elongate = (shape, hs) =>  {
+  const xyz = XYZ();
+  const q = abs(xyz).sub(hs).value;
+  const q2 = [max(q[0], 0), max(q[1], 0), max(q[2], 0)];
+  return shape.remap(q2[0], q2[1], q2[2]).add(min(max(q[0],max(q[1],q[2])),0.0));
+};
+
 const rotate_y = (shape, angle, center) => {
     const [x,y,z] = XYZ();
 
@@ -171,7 +178,6 @@ const rotate_y = (shape, angle, center) => {
       neg(sin(angle)).mul(x).add(cos(angle).mul(z))
     ).move(center);
 }
-
 
 const taper_xy_z = (shape, base_, height_, scale_, base_scale_) => {
   const [x,y,z] = XYZ();
@@ -200,7 +206,7 @@ const floor = (a_) => {
   return a_.sub(a_.mod(1));
 };
 
-const clamp = (a) => (lower) => (upper) => {
+const clamp = (a, lower, upper) => {
   return max(lower,min(upper,a));
 };
 
@@ -259,14 +265,30 @@ const cylinder = (h, d) => {
   return min(max(n.x,n.y), 0.0).add(length([max(n.x,0.0), max(n.y,0.0)]));
 };
 
+const capsule = (h_, d_) => {
+  const [x,y,z] = XYZ();
+  const h = toLibfiveValue(h_);
+  const d = toLibfiveValue(d_);
+  const yn = y.sub(clamp(y, 0.0, h));
+  return length([x,yn,z]).sub(d.div(2));
+};
+
 const dot2 = (v) => {
   return v.dot(v);
 };
 
-// Something weird with cone's d1 and d2. They're a ratio or something of each other.
-const cone = (h, d1, d2) => {
-  const cyl = cylinder(h, d2);
-  return cyl.taperXYZ([0,0,0], h, 1, 1 + (d2/d1));
+const cone = {
+  capped(h, d1, d2) {
+    const cyl = cylinder(h, d1);
+    //  taperXYZ(base_, height_, scale_, base_scale_)
+    return cyl.taperXYZ([0,0,h/-2], h, d2/d1, 1);
+  },
+  elongated(h, d1, d2, stretches) {
+    const cyl = cylinder(h, d1);
+    return cyl
+      .elongate(stretches)
+      .taperXYZ([0,0,h/-2], h, d2/d1, 1);
+  },
 };
 
 const box = {
@@ -330,6 +352,7 @@ class LibfiveValue {
   offset(o) { return this.sub(o); }
   shell(o) { return shell(this, o); }
   blend(b, m) { return blend.smooth(this, b, m); }
+  elongate(h) { return elongate(this, h); }
   //blendDifference: (b, m) => blend.difference2(b, toLibfiveValue(value), Value(m)),
   rotateX(radians) { return rotate_x(this, radians, [0,0,0]); }
   rotateY(radians) { return rotate_y(this, radians, [0,0,0]); }
@@ -543,4 +566,5 @@ module.exports = {
   print2d,
   textFitToArea,
   half_space,
+  capsule,
 };
