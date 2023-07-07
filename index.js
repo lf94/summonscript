@@ -168,6 +168,17 @@ const elongate = (shape, hs) =>  {
   return shape.remap(q2[0], q2[1], q2[2]).add(min(max(q[0],max(q[1],q[2])),0.0));
 };
 
+const rotate_x = (shape, angle, center) => {
+    const [x,y,z] = XYZ();
+
+    const a = shape.move(neg(center));
+    return shape.remap(
+      x,
+      cos(angle).mul(y).add(sin(angle).mul(z)),
+      neg(sin(angle)).mul(y).add(cos(angle).mul(z))
+    ).move(center);
+}
+
 const rotate_y = (shape, angle, center) => {
     const [x,y,z] = XYZ();
 
@@ -178,6 +189,39 @@ const rotate_y = (shape, angle, center) => {
       neg(sin(angle)).mul(x).add(cos(angle).mul(z))
     ).move(center);
 }
+
+const rotate_z = (shape, angle, center) => {
+    const [x,y,z] = XYZ();
+
+    const a = shape.move(neg(center));
+    return shape.remap(
+      cos(angle).mul(x).add(sin(angle).mul(y)),
+      neg(sin(angle)).mul(x).add(cos(angle).mul(y)),
+      z,
+    ).move(center);
+}
+
+const reflect_x = (shape, x0) => {
+  const [x,y,z] = XYZ();
+  return shape.remap(x0.mul(2).sub(x), y, z);
+};
+
+const reflect_y = (shape, y0) => {
+  const [x,y,z] = XYZ();
+  return shape.remap(x, y0.mul(2).sub(y), z);
+};
+
+const reflect_z = (shape, z0) => {
+  const [x,y,z] = XYZ();
+  return shape.remap(x, y, z0.mul(2).sub(z));
+};
+
+const extrude_z = (shape, zmin_, zmax_) => {
+  const [x, y, z] = XYZ();
+  const zmin = toLibfiveValue(zmin_);
+  const zmax = toLibfiveValue(zmax_);
+  return max(shape, max(zmin.sub(z), z.sub(zmax)));
+};
 
 const taper_xy_z = (shape, base_, height_, scale_, base_scale_) => {
   const [x,y,z] = XYZ();
@@ -221,12 +265,12 @@ const blend = {
     return min(a,b).sub(h.mul(h).mul(m).mul(1.0/4.0));
   },
   smooth2: (d1, d2, k) => {
-    const h = clamp(Value(0.5).add(Value(0.5).mul(d2.sub(d1)).div(k)))(0.0)(1.0);
+    const h = clamp(Value(0.5).add(Value(0.5).mul(d2.sub(d1)).div(k)), 0.0, 1.0);
     return mix(d2,d1,h).sub(k.mul(h).mul(Value(1.0).sub(h)));
   },
   difference2: (d1, d2, k) => {
-    const h = clamp(Value(0.5).sub(Value(0.5).mul(d2.add(d1)).div(k)))(0.0)(1.0);
-    return mix(d2)(neg(d1))(h).add(k.mul(h).mul(Value(1.0).sub(h)));
+    const h = clamp(Value(0.5).sub(Value(0.5).mul(d2.add(d1)).div(k)), 0.0, 1.0);
+    return mix(h, d2, neg(d1)).add(k.mul(h).mul(Value(1.0).sub(h)));
   },
 };
 
@@ -237,17 +281,22 @@ const ellipsoid = (wlh_) => {
   const [x,y,z] = [X(),Y(),Z()];
   const k0 = mag3(x.div(wlh[0]), y.div(wlh[1]), z.div(wlh[2]));
   const k1 = mag3(x.div(wlh[0]**2), y.div(wlh[1]**2), z.div(wlh[2]**2));
-  return k0.mul(k0.sub(1.0)).div(k1);
+  return k0.mul(k0.sub(1.0).div(k1));
 };
 
-const sphere_ = (d) => libfiveVal(sphere(Value(d/2).value, TVec3(0,0,0)));
+const sphere_ = (d_) => {
+  const xyz = XYZ();
+  const d = toLibfiveValue(d_);
+  return length(xyz).sub(d.div(2));
+};
 
 const triangle_ = (a, b, c) => libfiveVal(
   triangle(TVec2(...a), TVec2(...b), TVec2(...c))
 );
 
-const half_space = (norm, point) => {
+const half_space = (norm) => {
     const [x,y,z] = XYZ();
+    const point = [0,0,0];
     // dot(pos - point, norm)
     return x.sub(point[0]).mul(norm[0])
            .add(y.sub(point[1]).mul(norm[1]))
@@ -291,15 +340,31 @@ const cone = {
   },
 };
 
-const box = {
+const rectangle = {
   exact(b$) {
     const p$ = [X(),Y()];
     const d$ = abs(p$).sub(b$.div(2));
     return length(max(d$, 0)).add(min(max(d$.value[0], d$.value[1]), 0));
   },
-  rounded(b$, r) {
-    return this.exact(b$.sub(r*2)).sub(r);
+
+  // TODO: Clean up b$ meaning "wrapped libfive value".
+  // I accidentally mixed up r_ and r, causing problems.
+  roundedZ(b$, r_) {
+    const r = toLibfiveValue(r_);
+    return this.exact(b$.sub(r_*2)).sub(r);
   },
+}
+
+const box = {
+  exact(b$) {
+    return rectangle.exact(b$.slice(0, 2))
+      .extrudeZ(b$[2]/-2, b$[2]/2);
+  },
+  roundedZ(b$, r) {
+    return rectangle
+      .roundedZ(b$.slice(0, 2), r)
+      .extrudeZ(b$[2]/-2, b$[2]/2);
+  }
 }
 
 const textFitToArea = (str_, scale, area) => {
@@ -353,7 +418,7 @@ class LibfiveValue {
   shell(o) { return shell(this, o); }
   blend(b, m) { return blend.smooth(this, b, m); }
   elongate(h) { return elongate(this, h); }
-  //blendDifference: (b, m) => blend.difference2(b, toLibfiveValue(value), Value(m)),
+  blendDifference(b, m) { return blend.difference2(this, b, toLibfiveValue(m)); }
   rotateX(radians) { return rotate_x(this, radians, [0,0,0]); }
   rotateY(radians) { return rotate_y(this, radians, [0,0,0]); }
   rotateZ(radians) { return rotate_z(this, radians, [0,0,0]); }
@@ -364,9 +429,9 @@ class LibfiveValue {
   scaleY(amount) { return toLibfiveValue(scale_y(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
   scaleZ(amount) { return toLibfiveValue(scale_z(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
   // scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
-  //reflectX: (offset) => toLibfiveValue(reflect_x(value, Value(offset).value)),
-  //reflectY: (offset) => toLibfiveValue(reflect_y(value, Value(offset).value)),
-  //reflectZ: (offset) => toLibfiveValue(reflect_z(value, Value(offset).value)),
+  reflectX(offset) { return reflect_x(this, toLibfiveValue(offset)); }
+  reflectY(offset) { return reflect_y(this, toLibfiveValue(offset)); }
+  reflectZ(offset) { return reflect_z(this, toLibfiveValue(offset)); }
   //reflectXY: () => toLibfiveValue(reflect_xz(value)),
   //reflectYZ: () => toLibfiveValue(reflect_yz(value)),
   //reflectXZ: () => toLibfiveValue(reflect_xz(value)),
@@ -377,7 +442,7 @@ class LibfiveValue {
     return taper_xy_z(this, base, height, scale, baseScale);
   }
   //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
-  extrudeZ(zmin, zmax) { return toLibfiveValue(extrude_z(this.value, toLibfiveTree(zmin), toLibfiveTree(zmax))); }
+  extrudeZ(zmin, zmax) { return extrude_z(this, zmin, zmax); }
   move(xyz) { return move(this, xyz); }
   reify() {
     if (this.value instanceof Array) {
@@ -526,6 +591,7 @@ module.exports = {
   abs,
   sqrt,
   sin,
+  cos,
   floor,
   min,
   max,
@@ -567,4 +633,5 @@ module.exports = {
   textFitToArea,
   half_space,
   capsule,
+  mag3,
 };
