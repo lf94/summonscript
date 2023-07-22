@@ -168,37 +168,43 @@ const elongate = (shape, hs) =>  {
   return shape.remap(q2[0], q2[1], q2[2]).add(min(max(q[0],max(q[1],q[2])),0.0));
 };
 
-const rotate_x = (shape, angle, center) => {
-    const [x,y,z] = XYZ();
+const scale_y = (shape, a_) => {
+  const [x,y,z] = XYZ();
+  const a = toLibfiveValue(a_);
+  return shape.remap(x, y.div(a), z);
+};
 
-    const a = shape.move(neg(center));
-    return shape.remap(
-      x,
-      cos(angle).mul(y).add(sin(angle).mul(z)),
-      neg(sin(angle)).mul(y).add(cos(angle).mul(z))
-    ).move(center);
+const rotate_x = (shape, angle, center) => {
+  const [x,y,z] = XYZ();
+
+  const a = shape.move(neg(center));
+  return shape.remap(
+    x,
+    cos(angle).mul(y).add(sin(angle).mul(z)),
+    neg(sin(angle)).mul(y).add(cos(angle).mul(z))
+  ).move(center);
 }
 
 const rotate_y = (shape, angle, center) => {
-    const [x,y,z] = XYZ();
+  const [x,y,z] = XYZ();
 
-    const a = shape.move(neg(center));
-    return shape.remap(
-      cos(angle).mul(x).add(sin(angle).mul(z)),
-      y,
-      neg(sin(angle)).mul(x).add(cos(angle).mul(z))
-    ).move(center);
+  const a = shape.move(neg(center));
+  return shape.remap(
+    cos(angle).mul(x).add(sin(angle).mul(z)),
+    y,
+    neg(sin(angle)).mul(x).add(cos(angle).mul(z))
+  ).move(center);
 }
 
 const rotate_z = (shape, angle, center) => {
-    const [x,y,z] = XYZ();
+  const [x,y,z] = XYZ();
 
-    const a = shape.move(neg(center));
-    return shape.remap(
-      cos(angle).mul(x).add(sin(angle).mul(y)),
-      neg(sin(angle)).mul(x).add(cos(angle).mul(y)),
-      z,
-    ).move(center);
+  const a = shape.move(neg(center));
+  return shape.remap(
+    cos(angle).mul(x).add(sin(angle).mul(y)),
+    neg(sin(angle)).mul(x).add(cos(angle).mul(y)),
+    z,
+  ).move(center);
 }
 
 const reflect_x = (shape, x0) => {
@@ -221,6 +227,12 @@ const extrude_z = (shape, zmin_, zmax_) => {
   const zmin = toLibfiveValue(zmin_);
   const zmax = toLibfiveValue(zmax_);
   return max(shape, max(zmin.sub(z), z.sub(zmax)));
+};
+
+const revolve_y = (shape) => {
+  const [x, y, z] = XYZ();
+  const r = sqrt(x.square().add(z.square()));
+  return shape.remap(r, y, z).union(shape.remap(neg(r), y, z));
 };
 
 const taper_xy_z = (shape, base_, height_, scale_, base_scale_) => {
@@ -284,7 +296,7 @@ const ellipsoid = (wlh_) => {
   return k0.mul(k0.sub(1.0).div(k1));
 };
 
-const sphere_ = (d_) => {
+const sphere = (d_) => {
   const xyz = XYZ();
   const d = toLibfiveValue(d_);
   return length(xyz).sub(d.div(2));
@@ -303,9 +315,10 @@ const half_space = (norm) => {
            .add(z.sub(point[2]).mul(norm[2]));
 };
 
-const circle = (d) => {
+const circle = (d_) => {
+  const d$ = toLibfiveValue(d_);
   const p = XYZ();
-  return length(p).sub(d.div(2));
+  return length([p[0], p[1]]).sub(d$.div(2));
 };
 
 const cylinder = (h, d) => {
@@ -338,6 +351,11 @@ const cone = {
       .elongate(stretches)
       .taperXYZ([0,0,h/-2], h, d2/d1, 1);
   },
+  rounded(h, d1, d2) {
+    return this.capped(h, d1, d2)
+      .union(sphere(d1/2).move([0, 0, h/-2]))
+      .union(sphere(d2/2).move([0, 0, h/2]));
+  }
 };
 
 const rectangle = {
@@ -426,7 +444,7 @@ class LibfiveValue {
   //symmetricY: () => toLibfiveValue(symmetric_y(value)),
   //symmetricZ: () => toLibfiveValue(symmetric_z(value)),
   scaleX(amount) { return toLibfiveValue(scale_x(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
-  scaleY(amount) { return toLibfiveValue(scale_y(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
+  scaleY(amount) { return scale_y(this, amount); }
   scaleZ(amount) { return toLibfiveValue(scale_z(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
   // scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
   reflectX(offset) { return reflect_x(this, toLibfiveValue(offset)); }
@@ -437,12 +455,13 @@ class LibfiveValue {
   //reflectXZ: () => toLibfiveValue(reflect_xz(value)),
   //twirlX: (amount, radius, offset) => toLibfiveValue(twirl_x(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
   //twirlY: (amount, radius, offset) => toLibfiveValue(twirl_y(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
-  //twirlZ: (amount, radius, offset) => toLibfiveValue(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))),
+  twirlZ(amount, radius, offset) { toLibfiveValue(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))) }
   taperXYZ(base, height, scale, baseScale) {
     return taper_xy_z(this, base, height, scale, baseScale);
   }
   //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
   extrudeZ(zmin, zmax) { return extrude_z(this, zmin, zmax); }
+  revolveY() { return revolve_y(this); }
   move(xyz) { return move(this, xyz); }
   reify() {
     if (this.value instanceof Array) {
@@ -617,7 +636,7 @@ module.exports = {
   toMesh,
   toMeshCoords,
   ellipsoid,
-  sphere: sphere_,
+  sphere,
   atan2,
   triangle: triangle_,
   cylinder,
