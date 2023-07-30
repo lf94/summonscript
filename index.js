@@ -134,10 +134,6 @@ const length = (ps$) => {
   return sqrt(adds$);
 };
 
-const step = (a, b) => {
-  return max(compare(b, a).add(1), 1);
-};
-
 const dot = (a_, b_) => {
   const as = fromLibfiveValue(a_);
   const bs = fromLibfiveValue(b_);
@@ -172,6 +168,12 @@ const scale_y = (shape, a_) => {
   const [x,y,z] = XYZ();
   const a = toLibfiveValue(a_);
   return shape.remap(x, y.div(a), z);
+};
+
+const scale_z = (shape, a_) => {
+  const [x,y,z] = XYZ();
+  const a = toLibfiveValue(a_);
+  return shape.remap(x, y, z.div(a));
 };
 
 const rotate_x = (shape, angle, center) => {
@@ -263,7 +265,17 @@ const floor = (a_) => {
 };
 
 const clamp = (a, lower, upper) => {
-  return max(lower,min(upper,a));
+  return max(lower, min(upper,a));
+};
+
+const sign = (x) => {
+  return clamp(x.mul(toLibfiveValue(1.0).div(abs(x))), -1.0, 1.0);
+};
+
+const step = (edge_, x_) => {
+  const edge = toLibfiveValue(edge_);
+  const x = toLibfiveValue(x_);
+  return clamp(sign(x.sub(edge)), 0.0, 1.0);
 };
 
 const mix = (a, b, h) => {
@@ -443,9 +455,9 @@ class LibfiveValue {
   //symmetricX: () => toLibfiveValue(symmetric_x(value)),
   //symmetricY: () => toLibfiveValue(symmetric_y(value)),
   //symmetricZ: () => toLibfiveValue(symmetric_z(value)),
-  scaleX(amount) { return toLibfiveValue(scale_x(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
+  scaleX(amount) { return scale_x(this, amount); }
   scaleY(amount) { return scale_y(this, amount); }
-  scaleZ(amount) { return toLibfiveValue(scale_z(this.value, toLibfiveTree(amount), toLibfiveTree(0))); }
+  scaleZ(amount) { return scale_z(this, amount); }
   // scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
   reflectX(offset) { return reflect_x(this, toLibfiveValue(offset)); }
   reflectY(offset) { return reflect_y(this, toLibfiveValue(offset)); }
@@ -653,4 +665,8 @@ module.exports = {
   half_space,
   capsule,
   mag3,
+  rectangle,
+  clamp,
+  mix,
+  sign,
 };
