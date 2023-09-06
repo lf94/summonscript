@@ -48,7 +48,7 @@ pub fn main() !void {
   var buffers = RPCBuffers {
     .magic_bytes  = [_]u8 {0} ** START_MAGIC_BYTES.len,
     .total_points = [_]u8 {0} ** @sizeOf(u32),
-    .xyz_point    = [_]u8 {0} ** (@sizeOf(f32) * 3),
+    .xyz_point    = [_]u8 {0} ** (@sizeOf(u32) * 3),
   };
 
   var points_collected: u64 = 0;
@@ -59,6 +59,8 @@ pub fn main() !void {
   defer std.os.unlink(SOCKET_PATH) catch unreachable;
   try stream_server.listen(socket_address);
   defer stream_server.deinit();
+
+  var socket_maybe: ?std.net.StreamServer.Connection = null;
 
   var pollfd = std.os.pollfd {
     .fd = stream_server.sockfd.?,
@@ -87,37 +89,46 @@ pub fn main() !void {
     var pollfds = [_]std.os.linux.pollfd { pollfd };
     const poll_status = try std.os.poll(&pollfds, 1);
     if (poll_status & std.os.linux.POLL.IN == std.os.linux.POLL.IN) {
-      const socket = try stream_server.accept();
 
       switch(state) {
         .watch_start_magic_bytes => {
-          _ = try socket.stream.read(&buffers.magic_bytes);
+          socket_maybe = try stream_server.accept();
+          _ = try socket_maybe.?.stream.read(&buffers.magic_bytes);
           if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
           std.debug.print("watch_start_magic_bytes -> read_total_points transition\n", .{});
           state = .read_total_points;
+          _ = try socket_maybe.?.stream.write(&.{1});
+          pollfd.events = std.os.linux.POLL.ERR | std.os.linux.POLL.IN;
         },
         .read_total_points => {
-          _ = try socket.stream.read(&buffers.total_points);
-          const total_points = std.mem.bytesToValue(u32, &buffers.total_points);
-          points_maybe = try allocator.alloc(ray.Vector3, total_points);
-          std.debug.print("read_total_points -> read_xyz_point transition\n", .{});
-            state = .read_xyz_point;
+          if (socket_maybe) |socket| {
+            _ = try socket.stream.read(&buffers.total_points);
+            const total_points = std.mem.bytesToValue(u32, &buffers.total_points);
+            std.debug.print("points: {}\n", .{ total_points });
+            points_maybe = try allocator.alloc(ray.Vector3, total_points);
+            std.debug.print("read_total_points -> read_xyz_point transition\n", .{});
+              state = .read_xyz_point;
+            _ = try socket.stream.write(&.{2});
+          }
         },
         .read_xyz_point => {
-          _ = try socket.stream.read(&buffers.xyz_point);
-          const x = std.mem.bytesToValue(u32, buffers.xyz_point[0..4]);
-          const y = std.mem.bytesToValue(u32, buffers.xyz_point[4..8]);
-          const z = std.mem.bytesToValue(u32, buffers.xyz_point[8..12]);
-          points_maybe.?[points_collected] = .{ .x = @floatFromInt(x), .y = @floatFromInt(y), .z = @floatFromInt(z) };
-          points_collected += 1;
+          if (socket_maybe) |socket| {
+            _ = try socket.stream.read(&buffers.xyz_point);
+            const x = std.mem.bytesToValue(u32, buffers.xyz_point[0..4]);
+            const y = std.mem.bytesToValue(u32, buffers.xyz_point[4..8]);
+            const z = std.mem.bytesToValue(u32, buffers.xyz_point[8..12]);
+            points_maybe.?[points_collected] = .{ .x = @floatFromInt(x), .y = @floatFromInt(y), .z = @floatFromInt(z) };
+            points_collected += 1;
 
-          if (points_collected != points_maybe.?.len) continue;
+            if (points_collected != points_maybe.?.len) continue;
 
-          state = .watch_start_magic_bytes;
+            state = .watch_start_magic_bytes;
+            _ = try socket.stream.write(&.{0});
+            socket.stream.close();
+          }
         },
       }
 
-      socket.stream.close();
     }
   }
 }
