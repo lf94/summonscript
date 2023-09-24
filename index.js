@@ -514,7 +514,7 @@ const toAlignedRegion3 = (region, resolution) => {
 const toMesh = ({ value }, region, resolution) => {
   const r = toAlignedRegion3(region, resolution);
   const m = libfive_tree_render_mesh(value, r, resolution);
-  return koffi.decode(m, "libfive_mesh");
+  return m;
 };
 
 const toMeshCoords = ({ value }, region, resolution) => {

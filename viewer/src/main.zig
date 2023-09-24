@@ -28,10 +28,10 @@ pub fn main() !void {
 
   // Define the camera to look into our 3d world
   const camera = ray.Camera3D {
-    .position   = .{ .x=0.0, .y=10.0, .z=10.0 }, // Camera position
+    .position   = .{ .x=0.0, .y=-15.0, .z=7.5 }, // Camera position
     .target     = .{ .x=0.0, .y=0.0,  .z=0.0 },  // Camera looking at point
-    .up         = .{ .x=0.0, .y=0.0,  .z=-1.0 },  // Camera up vector (rotation towards target)
-    .fovy       = 120.0,                         // Camera field-of-view Y
+    .up         = .{ .x=0.0, .y=0.0,  .z=1.0 },  // Camera up vector (rotation towards target)
+    .fovy       = 90.0,                         // Camera field-of-view Y
     .projection = ray.CAMERA_PERSPECTIVE,        // Camera mode type
   };
 
@@ -42,93 +42,94 @@ pub fn main() !void {
   const RPCBuffers =  struct {
     magic_bytes:  [START_MAGIC_BYTES.len]u8,
     total_points: [@sizeOf(u32)]u8,
-    xyz_point:    [@sizeOf(u32)*3]u8,
+    xyz_point:    [@sizeOf(f32)*3*3]u8,
   };
 
   var buffers = RPCBuffers {
     .magic_bytes  = [_]u8 {0} ** START_MAGIC_BYTES.len,
     .total_points = [_]u8 {0} ** @sizeOf(u32),
-    .xyz_point    = [_]u8 {0} ** (@sizeOf(u32) * 3),
+    .xyz_point    = [_]u8 {0} ** (@sizeOf(f32) * 3 * 3),
   };
 
   var points_collected: u64 = 0;
   var points_maybe: ?[]ray.Vector3 = null;
-  var stream_server = std.net.StreamServer.init(.{});
+  var server = std.net.StreamServer.init(.{});
+  defer server.deinit();
+
   const SOCKET_PATH = "./libfive_mesh.sock";
   const socket_address = try std.net.Address.initUnix(SOCKET_PATH);
-  defer std.os.unlink(SOCKET_PATH) catch unreachable;
-  try stream_server.listen(socket_address);
-  defer stream_server.deinit();
+  defer std.fs.cwd().deleteFile(SOCKET_PATH) catch unreachable;
 
-  var socket_maybe: ?std.net.StreamServer.Connection = null;
-
-  var pollfd = std.os.pollfd {
-    .fd = stream_server.sockfd.?,
-    .events = std.os.linux.POLL.ERR | std.os.linux.POLL.IN,
-    .revents =  0,
-  };
+  try server.listen(socket_address);
+  var connection_maybe: ?std.net.StreamServer.Connection = null;
 
   while (!ray.WindowShouldClose()) {
-    ray.BeginDrawing();
+    if (state == .watch_start_magic_bytes) {
+      ray.BeginDrawing();
+      ray.ClearBackground(ray.RAYWHITE);
+      ray.BeginMode3D(camera);
 
-    ray.ClearBackground(ray.RAYWHITE);
-
-    ray.BeginMode3D(camera);
-
-    if (points_maybe) |points| {
-      if (points.len % 3 != 0) break; // A triangle will be missing a point... Ignore the model.
-      ray.DrawTriangleStrip3D(points.ptr, @as(c_int, @intCast(points.len)), ray.GRAY);
-    }
-
-    ray.DrawGrid(1000, 1.0);
-
-    ray.EndMode3D();
-
-    ray.EndDrawing();
-
-    var pollfds = [_]std.os.linux.pollfd { pollfd };
-    const poll_status = try std.os.poll(&pollfds, 1);
-    if (poll_status & std.os.linux.POLL.IN == std.os.linux.POLL.IN) {
-
-      switch(state) {
-        .watch_start_magic_bytes => {
-          socket_maybe = try stream_server.accept();
-          _ = try socket_maybe.?.stream.read(&buffers.magic_bytes);
-          if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
-          std.debug.print("watch_start_magic_bytes -> read_total_points transition\n", .{});
-          state = .read_total_points;
-          _ = try socket_maybe.?.stream.write(&.{1});
-          pollfd.events = std.os.linux.POLL.ERR | std.os.linux.POLL.IN;
-        },
-        .read_total_points => {
-          if (socket_maybe) |socket| {
-            _ = try socket.stream.read(&buffers.total_points);
-            const total_points = std.mem.bytesToValue(u32, &buffers.total_points);
-            std.debug.print("points: {}\n", .{ total_points });
-            points_maybe = try allocator.alloc(ray.Vector3, total_points);
-            std.debug.print("read_total_points -> read_xyz_point transition\n", .{});
-              state = .read_xyz_point;
-            _ = try socket.stream.write(&.{2});
+      if (points_maybe) |points| {
+          var index: u32 = 0;
+          while (index < points_collected) : (index += 3) {
+            ray.DrawTriangle3D(points[index + 0], points[index + 1], points[index + 2], ray.GRAY);
+            ray.DrawLine3D(points[index + 0], points[index + 1], ray.WHITE);
+            ray.DrawLine3D(points[index + 1], points[index + 2], ray.WHITE);
+            ray.DrawLine3D(points[index + 2], points[index + 0], ray.WHITE);
           }
-        },
-        .read_xyz_point => {
-          if (socket_maybe) |socket| {
-            _ = try socket.stream.read(&buffers.xyz_point);
-            const x = std.mem.bytesToValue(u32, buffers.xyz_point[0..4]);
-            const y = std.mem.bytesToValue(u32, buffers.xyz_point[4..8]);
-            const z = std.mem.bytesToValue(u32, buffers.xyz_point[8..12]);
-            points_maybe.?[points_collected] = .{ .x = @floatFromInt(x), .y = @floatFromInt(y), .z = @floatFromInt(z) };
-            points_collected += 1;
-
-            if (points_collected != points_maybe.?.len) continue;
-
-            state = .watch_start_magic_bytes;
-            _ = try socket.stream.write(&.{0});
-            socket.stream.close();
-          }
-        },
       }
 
+      ray.EndMode3D();
+      ray.EndDrawing();
+    }
+
+    switch(state) {
+      .watch_start_magic_bytes => {
+        if (connection_maybe) |connection| {
+          connection.stream.close();
+        }
+        connection_maybe = try server.accept();
+        _ = try connection_maybe.?.stream.reader().read(&buffers.magic_bytes);
+        if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
+        std.debug.print("watch_start_magic_bytes -> read_total_points transition\n", .{});
+        state = .read_total_points;
+        points_collected = 0;
+        _ = try connection_maybe.?.stream.write(&.{1});
+      },
+      .read_total_points => {
+        std.debug.print("read_total_points trigger\n", .{ });
+        _ = try connection_maybe.?.stream.reader().read(&buffers.total_points);
+        const total_points = std.mem.bytesToValue(u32, &buffers.total_points);
+        std.debug.print("points: {}\n", .{ total_points });
+        points_maybe = try allocator.alloc(ray.Vector3, total_points);
+        std.debug.print("read_total_points -> read_xyz_point transition\n", .{});
+        state = .read_xyz_point;
+        _ = try connection_maybe.?.stream.write(&.{2});
+      },
+      .read_xyz_point => {
+        _ = try connection_maybe.?.stream.reader().read(&buffers.xyz_point);
+        const ax = std.mem.bytesToValue(f32, buffers.xyz_point[0..4]);
+        const ay = std.mem.bytesToValue(f32, buffers.xyz_point[4..8]);
+        const az = std.mem.bytesToValue(f32, buffers.xyz_point[8..12]);
+        points_maybe.?[points_collected] = .{ .x = ax, .y = ay, .z = az };
+        points_collected += 1;
+        const bx = std.mem.bytesToValue(f32, buffers.xyz_point[12..16]);
+        const by = std.mem.bytesToValue(f32, buffers.xyz_point[16..20]);
+        const bz = std.mem.bytesToValue(f32, buffers.xyz_point[20..24]);
+        points_maybe.?[points_collected] = .{ .x = bx, .y = by, .z = bz };
+        points_collected += 1;
+        const cx = std.mem.bytesToValue(f32, buffers.xyz_point[24..28]);
+        const cy = std.mem.bytesToValue(f32, buffers.xyz_point[28..32]);
+        const cz = std.mem.bytesToValue(f32, buffers.xyz_point[32..36]);
+        points_maybe.?[points_collected] = .{ .x = cx, .y = cy, .z = cz };
+        points_collected += 1;
+
+        if (points_collected != points_maybe.?.len) continue;
+
+        state = .watch_start_magic_bytes;
+        std.debug.print("read_xyz_point -> watch_start_magic_bytes transition\n", .{});
+        _ = try connection_maybe.?.stream.write(&.{0});
+      },
     }
   }
 }
