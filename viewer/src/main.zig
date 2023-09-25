@@ -1,5 +1,6 @@
 const std = @import("std");
 const ray = @cImport(@cInclude("raylib.h"));
+const fcntl = @cImport(@cInclude("fcntl.h"));
 
 // When started, the program watches stdin for magic bytes that are randomly generated.
 // When finding this, then read in the number of incoming points so memory can
@@ -14,6 +15,8 @@ const State = enum {
   read_xyz_point
 };
 
+pub const options_override = .{ .io_mode = .evented };
+
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
   var allocator = gpa.allocator();
@@ -23,16 +26,17 @@ pub fn main() !void {
     .height = 480,
   };
 
+  ray.SetConfigFlags(ray.FLAG_MSAA_4X_HINT);
   ray.InitWindow(screen.width, screen.height, "libfive_mesh viewer");
   defer ray.CloseWindow();
 
   // Define the camera to look into our 3d world
-  const camera = ray.Camera3D {
-    .position   = .{ .x=0.0, .y=-15.0, .z=7.5 }, // Camera position
-    .target     = .{ .x=0.0, .y=0.0,  .z=0.0 },  // Camera looking at point
-    .up         = .{ .x=0.0, .y=0.0,  .z=1.0 },  // Camera up vector (rotation towards target)
-    .fovy       = 90.0,                         // Camera field-of-view Y
-    .projection = ray.CAMERA_PERSPECTIVE,        // Camera mode type
+  var camera = ray.Camera3D {
+    .position   = .{ .x=0.0, .y=-25.0,  .z=5.0 }, // Camera position
+    .target     = .{ .x=0.0, .y=0.0,  .z=0.0 }, // Camera looking at point
+    .up         = .{ .x=0.0, .y=0.0,  .z=1.0 }, // Camera up vector (rotation towards target)
+    .fovy       = 45.0,                         // Camera field-of-view Y
+    .projection = ray.CAMERA_PERSPECTIVE,       // Camera mode type
   };
 
   ray.SetTargetFPS(60);
@@ -56,17 +60,22 @@ pub fn main() !void {
   var server = std.net.StreamServer.init(.{});
   defer server.deinit();
 
-  const SOCKET_PATH = "./libfive_mesh.sock";
+  const SOCKET_PATH = "/tmp/libfive_mesh.sock";
   const socket_address = try std.net.Address.initUnix(SOCKET_PATH);
   defer std.fs.cwd().deleteFile(SOCKET_PATH) catch unreachable;
 
   try server.listen(socket_address);
+  const sockfd = server.sockfd.?;
+  const flags = fcntl.fcntl(sockfd, fcntl.F_GETFL);
+  _ = fcntl.fcntl(sockfd, fcntl.F_SETFL, flags | fcntl.O_NONBLOCK);
   var connection_maybe: ?std.net.StreamServer.Connection = null;
 
   while (!ray.WindowShouldClose()) {
     if (state == .watch_start_magic_bytes) {
+      ray.UpdateCamera(&camera, ray.CAMERA_ORBITAL);
+
       ray.BeginDrawing();
-      ray.ClearBackground(ray.RAYWHITE);
+      ray.ClearBackground(ray.DARKBLUE);
       ray.BeginMode3D(camera);
 
       if (points_maybe) |points| {
@@ -83,12 +92,19 @@ pub fn main() !void {
       ray.EndDrawing();
     }
 
-    switch(state) {
+    blk: { switch(state) {
       .watch_start_magic_bytes => {
-        if (connection_maybe) |connection| {
-          connection.stream.close();
+        var accepted_addr: std.net.Address = undefined;
+        var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
+        const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
+        if (accept_result >= 0) {
+          connection_maybe = std.net.StreamServer.Connection {
+            .stream = std.net.Stream{ .handle = @intCast(accept_result) },
+            .address = accepted_addr,
+          };
+        } else {
+          break :blk;
         }
-        connection_maybe = try server.accept();
         _ = try connection_maybe.?.stream.reader().read(&buffers.magic_bytes);
         if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
         std.debug.print("watch_start_magic_bytes -> read_total_points transition\n", .{});
@@ -129,8 +145,9 @@ pub fn main() !void {
         state = .watch_start_magic_bytes;
         std.debug.print("read_xyz_point -> watch_start_magic_bytes transition\n", .{});
         _ = try connection_maybe.?.stream.write(&.{0});
+        connection_maybe.?.stream.close();
       },
-    }
+    } }
   }
 }
 

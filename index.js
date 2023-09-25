@@ -511,10 +511,8 @@ const toAlignedRegion3 = (region, resolution) => {
   return Region3(r_[0], r_[1]);
 };
 
-const toMesh = ({ value }, region, resolution) => {
-  const r = toAlignedRegion3(region, resolution);
-  const m = libfive_tree_render_mesh(value, r, resolution);
-  return m;
+const toMesh = (result, region, resolution) => {
+  return libfive_tree_render_mesh(result.value, Region3(region[0], region[1]), resolution);
 };
 
 const toMeshCoords = ({ value }, region, resolution) => {
