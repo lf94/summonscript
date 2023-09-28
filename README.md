@@ -14,6 +14,10 @@
 * Small technology stack
 * Has a fun theme around magic :D
 
+## Demo
+
+[There'll be a demo here shortly]
+
 ## Installation
 
 You'll need three things: NodeJS 0.19, Zig 0.11 and raylib.
