@@ -1,10 +1,10 @@
 # SummonScript
 
-<center>
+<p align="center">
 <img width="320" src="/logo.png" />
 <p>Manifest manifold models with magical machinations.</p>
 <p>In other words: use code to model objects.</p>
-</center>
+</p>
 
 ## Features
 
