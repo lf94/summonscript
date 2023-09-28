@@ -2,9 +2,9 @@
 
 <p align="center">
 <img width="320" src="/logo.png" />
-<p>Manifest manifold models with magical machinations.</p>
-<p>In other words: use code to model objects.</p>
 </p>
+<p align="center">Manifest manifold models with magical machinations.</p>
+<p align="center">In other words: use code to model objects.</p>
 
 ## Features
 
