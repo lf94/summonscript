@@ -1,10 +1,10 @@
 # SummonScript
 
-![](./logo.png)
-
-Manifest manifold models with magical machinations.
-
-In other words: use code to model objects.
+<center>
+<img width="320" src="/logo.png" />
+<p>Manifest manifold models with magical machinations.</p>
+<p>In other words: use code to model objects.</p>
+</center>
 
 ## Features
 
@@ -37,7 +37,7 @@ do `node examples/something.js`!
 
 And that's literally all to it. How you want to setup the rest of your environment
 is completely up to you. For example, in my editor, I type `:cad` and it starts
-the viewer and opens a new file.
+the viewer and opens a new file. On save, it runs the script so the viewer updates.
 
 ## Background
 
