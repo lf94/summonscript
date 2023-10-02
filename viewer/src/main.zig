@@ -1,5 +1,5 @@
 const std = @import("std");
-const ray = @cImport(@cInclude("raylib.h"));
+const raylib = @cImport(@cInclude("raylib.h"));
 const fcntl = @cImport(@cInclude("fcntl.h"));
 
 // When started, the program watches stdin for magic bytes that are randomly generated.
@@ -7,12 +7,50 @@ const fcntl = @cImport(@cInclude("fcntl.h"));
 // be allocated, and then read in tuples of points in x,y,z u32 format.
 // When reaching the last one go back into "watching" mode.
 
-const START_MAGIC_BYTES = [_]u8 { 0x00, 0xe3, 0x42, 0x61, 0x85, 0x96, 0x41, 0x46, 0x37, 0xc9, 0xfd, 0xa5, 0x51, 0xf9, 0x60, 0x68 };
+const START_MAGIC_BYTES = [_]u8{ 0x00, 0xe3, 0x42, 0x61, 0x85, 0x96, 0x41, 0x46, 0x37, 0xc9, 0xfd, 0xa5, 0x51, 0xf9, 0x60, 0x68 };
 
 const State = enum {
   watch_start_magic_bytes,
-  read_total_points,
-  read_xyz_point
+  read_vertex_count,
+  read_vertices,
+  read_triangle_count,
+  read_indices,
+  load_model,
+};
+
+const Mesh = struct {
+  isLoaded: bool = false,
+  vertexCount: i32,
+  triangleCount: i32,
+  vertices: ?std.ArrayList(f32),
+  indices: ?std.ArrayList(u16),
+  raylib: ?raylib.Mesh,
+
+  fn initRaylibMesh(self: *@This()) void {
+    self.raylib = .{
+      .vertexCount = self.vertexCount,
+      .triangleCount = self.triangleCount,
+      .vertices = @ptrCast(self.vertices.?.items),
+      .texcoords = null,
+      .texcoords2 = null,
+      .normals = null,
+      .tangents = null,
+      .colors = null,
+      .indices = @ptrCast(self.indices.?.items),
+      .animVertices = null,
+      .animNormals = null,
+      .boneIds = null,
+      .boneWeights = null,
+      .vaoId = 0,
+      .vboId = null,
+    };
+  }
+
+  fn loadModel(self: *@This()) raylib.Model {
+    self.initRaylibMesh();
+    raylib.UploadMesh(&self.raylib.?, false);
+    return raylib.LoadModelFromMesh(self.raylib.?);
+  }
 };
 
 pub const options_override = .{ .io_mode = .evented };
@@ -26,37 +64,49 @@ pub fn main() !void {
     .height = 480,
   };
 
-  ray.SetConfigFlags(ray.FLAG_MSAA_4X_HINT);
-  ray.InitWindow(screen.width, screen.height, "libfive_mesh viewer");
-  defer ray.CloseWindow();
+  raylib.SetConfigFlags(raylib.FLAG_MSAA_4X_HINT);
+  raylib.InitWindow(screen.width, screen.height, "libfive_mesh viewer");
+  defer raylib.CloseWindow();
 
   // Define the camera to look into our 3d world
-  var camera = ray.Camera3D {
-    .position   = .{ .x=0.0, .y=-25.0,  .z=5.0 }, // Camera position
-    .target     = .{ .x=0.0, .y=0.0,  .z=0.0 }, // Camera looking at point
-    .up         = .{ .x=0.0, .y=0.0,  .z=1.0 }, // Camera up vector (rotation towards target)
-    .fovy       = 45.0,                         // Camera field-of-view Y
-    .projection = ray.CAMERA_PERSPECTIVE,       // Camera mode type
+  var camera = raylib.Camera3D{
+    .position = .{ .x = 0.0, .y = -25.0, .z = 5.0 }, // Camera position
+    .target = .{ .x = 0.0, .y = 0.0, .z = 0.0 }, // Camera looking at point
+    .up = .{ .x = 0.0, .y = 0.0, .z = 1.0 }, // Camera up vector (rotation towards target)
+    .fovy = 45.0, // Camera field-of-view Y
+    .projection = raylib.CAMERA_PERSPECTIVE, // Camera mode type
   };
 
-  ray.SetTargetFPS(60);
+  raylib.SetTargetFPS(60);
 
   var state = State.watch_start_magic_bytes;
 
-  const RPCBuffers =  struct {
-    magic_bytes:  [START_MAGIC_BYTES.len]u8,
-    total_points: [@sizeOf(u32)]u8,
-    xyz_point:    [@sizeOf(f32)*3*3]u8,
+  const RPCBuffers = struct {
+    magic_bytes: [START_MAGIC_BYTES.len]u8,
+    vertex_count: [@sizeOf(u32)]u8,
+    triangle_count: [@sizeOf(u32)]u8,
+    xyz_coords: [@sizeOf(f32) * 3]u8,
+    abc_indices: [@sizeOf(u32) * 3]u8,
   };
 
-  var buffers = RPCBuffers {
-    .magic_bytes  = [_]u8 {0} ** START_MAGIC_BYTES.len,
-    .total_points = [_]u8 {0} ** @sizeOf(u32),
-    .xyz_point    = [_]u8 {0} ** (@sizeOf(f32) * 3 * 3),
+  var buffers = RPCBuffers{
+    .magic_bytes = [_]u8{0} ** START_MAGIC_BYTES.len,
+    .vertex_count = [_]u8{0} ** @sizeOf(u32),
+    .triangle_count = [_]u8{0} ** @sizeOf(u32),
+    .xyz_coords = [_]u8{0} ** (@sizeOf(f32) * 3),
+    .abc_indices = [_]u8{0} ** (@sizeOf(u32) * 3),
   };
 
-  var points_collected: u64 = 0;
-  var points_maybe: ?[]ray.Vector3 = null;
+  var mesh: Mesh = .{
+    .vertexCount = 0,
+    .triangleCount = 0,
+    .vertices = null,
+    .indices = null,
+    .raylib = null,
+  };
+
+  var model_maybe: ?raylib.Model = null;
+
   var server = std.net.StreamServer.init(.{});
   defer server.deinit();
 
@@ -70,84 +120,102 @@ pub fn main() !void {
   _ = fcntl.fcntl(sockfd, fcntl.F_SETFL, flags | fcntl.O_NONBLOCK);
   var connection_maybe: ?std.net.StreamServer.Connection = null;
 
-  while (!ray.WindowShouldClose()) {
+  while (!raylib.WindowShouldClose()) {
     if (state == .watch_start_magic_bytes) {
-      ray.UpdateCamera(&camera, ray.CAMERA_ORBITAL);
+      raylib.UpdateCamera(&camera, raylib.CAMERA_FREE);
 
-      ray.BeginDrawing();
-      ray.ClearBackground(ray.DARKBLUE);
-      ray.BeginMode3D(camera);
+      raylib.BeginDrawing();
+      raylib.ClearBackground(raylib.DARKBLUE);
+      raylib.BeginMode3D(camera);
 
-      if (points_maybe) |points| {
-          var index: u32 = 0;
-          while (index < points_collected) : (index += 3) {
-            ray.DrawTriangle3D(points[index + 0], points[index + 1], points[index + 2], ray.GRAY);
-            ray.DrawLine3D(points[index + 0], points[index + 1], ray.WHITE);
-            ray.DrawLine3D(points[index + 1], points[index + 2], ray.WHITE);
-            ray.DrawLine3D(points[index + 2], points[index + 0], ray.WHITE);
-          }
+      if (model_maybe) |model| {
+        raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.GRAY);
       }
 
-      ray.EndMode3D();
-      ray.EndDrawing();
+      raylib.EndMode3D();
+      raylib.EndDrawing();
     }
 
-    blk: { switch(state) {
-      .watch_start_magic_bytes => {
-        var accepted_addr: std.net.Address = undefined;
-        var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
-        const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
-        if (accept_result >= 0) {
-          connection_maybe = std.net.StreamServer.Connection {
-            .stream = std.net.Stream{ .handle = @intCast(accept_result) },
-            .address = accepted_addr,
-          };
-        } else {
-          break :blk;
-        }
-        _ = try connection_maybe.?.stream.reader().read(&buffers.magic_bytes);
-        if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
-        std.debug.print("watch_start_magic_bytes -> read_total_points transition\n", .{});
-        state = .read_total_points;
-        points_collected = 0;
-        _ = try connection_maybe.?.stream.write(&.{1});
-      },
-      .read_total_points => {
-        std.debug.print("read_total_points trigger\n", .{ });
-        _ = try connection_maybe.?.stream.reader().read(&buffers.total_points);
-        const total_points = std.mem.bytesToValue(u32, &buffers.total_points);
-        std.debug.print("points: {}\n", .{ total_points });
-        points_maybe = try allocator.alloc(ray.Vector3, total_points);
-        std.debug.print("read_total_points -> read_xyz_point transition\n", .{});
-        state = .read_xyz_point;
-        _ = try connection_maybe.?.stream.write(&.{2});
-      },
-      .read_xyz_point => {
-        _ = try connection_maybe.?.stream.reader().read(&buffers.xyz_point);
-        const ax = std.mem.bytesToValue(f32, buffers.xyz_point[0..4]);
-        const ay = std.mem.bytesToValue(f32, buffers.xyz_point[4..8]);
-        const az = std.mem.bytesToValue(f32, buffers.xyz_point[8..12]);
-        points_maybe.?[points_collected] = .{ .x = ax, .y = ay, .z = az };
-        points_collected += 1;
-        const bx = std.mem.bytesToValue(f32, buffers.xyz_point[12..16]);
-        const by = std.mem.bytesToValue(f32, buffers.xyz_point[16..20]);
-        const bz = std.mem.bytesToValue(f32, buffers.xyz_point[20..24]);
-        points_maybe.?[points_collected] = .{ .x = bx, .y = by, .z = bz };
-        points_collected += 1;
-        const cx = std.mem.bytesToValue(f32, buffers.xyz_point[24..28]);
-        const cy = std.mem.bytesToValue(f32, buffers.xyz_point[28..32]);
-        const cz = std.mem.bytesToValue(f32, buffers.xyz_point[32..36]);
-        points_maybe.?[points_collected] = .{ .x = cx, .y = cy, .z = cz };
-        points_collected += 1;
+    blk: {
+      switch (state) {
+        .watch_start_magic_bytes => {
+          var accepted_addr: std.net.Address = undefined;
+          var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
+          const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
+          if (accept_result >= 0) {
+            connection_maybe = std.net.StreamServer.Connection{
+              .stream = std.net.Stream{ .handle = @intCast(accept_result) },
+              .address = accepted_addr,
+            };
+          } else {
+            break :blk;
+          }
+          _ = try connection_maybe.?.stream.reader().read(&buffers.magic_bytes);
+          if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
+          std.debug.print("watch_start_magic_bytes -> read_vertex_count transition\n", .{});
+          state = .read_vertex_count;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .read_vertex_count => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.vertex_count);
+          mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
+          std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
+          std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
+          mesh.vertices = std.ArrayList(f32).init(allocator);
+          std.debug.print("Allocated space for vertices\n", .{});
+          state = .read_vertices;
+          _ = try connection_maybe.?.stream.write(&.{2});
+        },
+        .read_vertices => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
+          const x = std.mem.bytesToValue(f32, buffers.xyz_coords[0..4]);
+          const y = std.mem.bytesToValue(f32, buffers.xyz_coords[4..8]);
+          const z = std.mem.bytesToValue(f32, buffers.xyz_coords[8..12]);
+          try mesh.vertices.?.append(x);
+          try mesh.vertices.?.append(y);
+          try mesh.vertices.?.append(z);
 
-        if (points_collected != points_maybe.?.len) continue;
+          if ((mesh.vertices.?.items.len / 3) != mesh.vertexCount) continue;
+          
+          std.debug.print("read_vertices -> read_triangle_count transition\n", .{});
+          state = .read_triangle_count;
+          _ = try connection_maybe.?.stream.write(&.{3});
+        },
+        .read_triangle_count => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.triangle_count);
+          mesh.triangleCount = std.mem.bytesToValue(i32, &buffers.triangle_count);
+          std.debug.print("Triangle count: {}\n", .{mesh.triangleCount});
+          std.debug.print("read_triangle_count -> read_indices transition\n", .{});
+          mesh.indices = std.ArrayList(u16).init(allocator);
+          std.debug.print("Allocated space for indices\n", .{});
+          state = .read_indices;
+          _ = try connection_maybe.?.stream.write(&.{4});
+        },
+        .read_indices => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.abc_indices);
+          try mesh.indices.?.append(std.mem.bytesToValue(u16, buffers.abc_indices[2..4]));
+          try mesh.indices.?.append(std.mem.bytesToValue(u16, buffers.abc_indices[6..8]));
+          try mesh.indices.?.append(std.mem.bytesToValue(u16, buffers.abc_indices[10..12]));
 
-        state = .watch_start_magic_bytes;
-        std.debug.print("read_xyz_point -> watch_start_magic_bytes transition\n", .{});
-        _ = try connection_maybe.?.stream.write(&.{0});
-        connection_maybe.?.stream.close();
-      },
-    } }
+          if ((mesh.indices.?.items.len / 3) != mesh.triangleCount) continue;
+          
+          std.debug.print("read_indices -> load_model transition\n", .{});
+          state = .load_model;
+          _ = try connection_maybe.?.stream.write(&.{5});
+        },
+        .load_model => {
+          // Unload previous model from VRAM. This unloads the model's mesh.
+          // if (model_maybe) |model| { raylib.UnloadModel(model); }
+
+          // Create the new mesh/model from the streamed data
+          model_maybe = mesh.loadModel();
+
+          state = .watch_start_magic_bytes;
+          std.debug.print("load_model  -> watch_start_magic_bytes transition\n", .{});
+          _ = try connection_maybe.?.stream.write(&.{0});
+          connection_maybe.?.stream.close();
+        },
+      }
+    }
   }
 }
-

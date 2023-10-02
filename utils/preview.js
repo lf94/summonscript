@@ -18,8 +18,6 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
     client.write(START_MAGIC_BYTES, () => {});
     client.on('data', (chunk) => {
       switch (chunk[0]) {
-        // the viewer has gone back to watching for start magic bytes,
-        // we can close the connection.
         case 0: {
           console.log("Closing pipe");
           client.destroy();
@@ -29,33 +27,53 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
         }
         case 1: {
           console.log("START_MAGIC_BYTES Acknowledged");
-          console.log("Writing points count");
-          const tri_count_buf = Buffer.allocUnsafe(4);
-          tri_count_buf.writeUInt32LE(mesh.tri_count * 3);
-          client.write(tri_count_buf, () => {});
+          console.log("Writing vertex count");
+          const buf = Buffer.allocUnsafe(4);
+          buf.writeUInt32LE(mesh.vert_count);
+          client.write(buf, () => {});
           break;
         }
         case 2: {
-          console.log("Points count Acknowledged");
-          console.log("Writing points data");
-          let coord_buf;
+          console.log("Vertex count Acknowledged");
+          console.log("Writing vertices");
+          let buf;
+          let pt;
+          for (const vert of verts) {
+            buf = Buffer.allocUnsafe(4 * 3);
+            buf.writeFloatLE(vert.x, 0);
+            buf.writeFloatLE(vert.y, 4);
+            buf.writeFloatLE(vert.z, 8);
+            client.write(buf, () => {});
+          }
+          break;
+        }
+        case 3: {
+          console.log("Vertices Acknowledged");
+          console.log("Writing triangle count");
+          console.log(mesh.tri_count);
+          const buf = Buffer.allocUnsafe(4);
+          buf.writeUInt32LE(mesh.tri_count);
+          client.write(buf, () => {});
+          break;
+        }
+        case 4: {
+          console.log("Triangle count Acknowledged");
+          console.log("Writing indices");
+          let buf;
           let pt;
           for (const tri of tris) {
-            coord_buf = Buffer.allocUnsafe(4 * 3 * 3);
-            pt = verts[tri.a];
-            coord_buf.writeFloatLE(pt.x, 0);
-            coord_buf.writeFloatLE(pt.y, 4);
-            coord_buf.writeFloatLE(pt.z, 8);
-            pt = verts[tri.b];
-            coord_buf.writeFloatLE(pt.x, 12);
-            coord_buf.writeFloatLE(pt.y, 16);
-            coord_buf.writeFloatLE(pt.z, 20);
-            pt = verts[tri.c];
-            coord_buf.writeFloatLE(pt.x, 24);
-            coord_buf.writeFloatLE(pt.y, 28);
-            coord_buf.writeFloatLE(pt.z, 32);
-            client.write(coord_buf, () => {});
+            buf = Buffer.allocUnsafe(4 * 3);
+            buf.writeUInt32LE(tri.a, 0);
+            buf.writeUInt32LE(tri.b, 4);
+            buf.writeUInt32LE(tri.c, 8);
+            client.write(buf, () => {});
           }
+          break;
+        }
+        // the viewer is loading the model now.
+        // we can close the connection.
+        case 5: {
+          console.log("Indices Acknowledged");
           break;
         }
       }
