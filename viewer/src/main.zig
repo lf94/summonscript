@@ -48,7 +48,7 @@ const Mesh = struct {
 
   fn loadModel(self: *@This()) raylib.Model {
     self.initRaylibMesh();
-    raylib.UploadMesh(&self.raylib.?, false);
+    raylib.UploadMesh(&self.raylib.?, true);
     return raylib.LoadModelFromMesh(self.raylib.?);
   }
 };
@@ -81,20 +81,29 @@ pub fn main() !void {
 
   var state = State.watch_start_magic_bytes;
 
+  const XYZ_SIZE = @sizeOf(f32) * 3;
+  const ABC_SIZE = @sizeOf(u32) * 3;
+  const SOCKET_BUFFER_SIZE = 32768; // Apparently the default on Linux
+  const XYZ_COORDS_SIZE_BYTES = XYZ_SIZE * (SOCKET_BUFFER_SIZE / XYZ_SIZE);
+  const ABC_INDICES_SIZE_BYTES = ABC_SIZE * (SOCKET_BUFFER_SIZE / ABC_SIZE);
+
   const RPCBuffers = struct {
+    ack: [1]u8,
     magic_bytes: [START_MAGIC_BYTES.len]u8,
     vertex_count: [@sizeOf(u32)]u8,
     triangle_count: [@sizeOf(u32)]u8,
-    xyz_coords: [@sizeOf(f32) * 3]u8,
-    abc_indices: [@sizeOf(u32) * 3]u8,
+    // Try to saturate internal Linux sockets (we go with 4k since memory pages are usually this size)
+    xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
+    abc_indices: [ABC_INDICES_SIZE_BYTES]u8,
   };
 
   var buffers = RPCBuffers{
+    .ack = [1]u8{0},
     .magic_bytes = [_]u8{0} ** START_MAGIC_BYTES.len,
     .vertex_count = [_]u8{0} ** @sizeOf(u32),
     .triangle_count = [_]u8{0} ** @sizeOf(u32),
-    .xyz_coords = [_]u8{0} ** (@sizeOf(f32) * 3),
-    .abc_indices = [_]u8{0} ** (@sizeOf(u32) * 3),
+    .xyz_coords = [_]u8{0} ** XYZ_COORDS_SIZE_BYTES,
+    .abc_indices = [_]u8{0} ** ABC_INDICES_SIZE_BYTES,
   };
 
   var mesh: Mesh = .{
@@ -125,7 +134,8 @@ pub fn main() !void {
       raylib.UpdateCamera(&camera, raylib.CAMERA_FREE);
 
       raylib.BeginDrawing();
-      raylib.ClearBackground(raylib.DARKBLUE);
+      raylib.ClearBackground(raylib.BLACK);
+      
       raylib.BeginMode3D(camera);
 
       if (model_maybe) |model| {
@@ -142,6 +152,7 @@ pub fn main() !void {
           var accepted_addr: std.net.Address = undefined;
           var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
           const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
+          if (connection_maybe != null) { break :blk; }
           if (accept_result >= 0) {
             connection_maybe = std.net.StreamServer.Connection{
               .stream = std.net.Stream{ .handle = @intCast(accept_result) },
@@ -162,18 +173,18 @@ pub fn main() !void {
           std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
           std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
           mesh.vertices = std.ArrayList(f32).init(allocator);
-          std.debug.print("Allocated space for vertices\n", .{});
           state = .read_vertices;
           _ = try connection_maybe.?.stream.write(&.{2});
         },
         .read_vertices => {
-          _ = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
-          const x = std.mem.bytesToValue(f32, buffers.xyz_coords[0..4]);
-          const y = std.mem.bytesToValue(f32, buffers.xyz_coords[4..8]);
-          const z = std.mem.bytesToValue(f32, buffers.xyz_coords[8..12]);
-          try mesh.vertices.?.append(x);
-          try mesh.vertices.?.append(y);
-          try mesh.vertices.?.append(z);
+          var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
+          var offset: usize = 0;
+          while (bytes_read > 0) : (bytes_read -= 4) {
+            // Could be an x, y or z coordinate
+            const coord = std.mem.bytesToValue(f32, @as(*[4]u8, @ptrCast(buffers.xyz_coords[offset..offset + 4])));
+            try mesh.vertices.?.append(coord);
+            offset += 4;
+          }
 
           if ((mesh.vertices.?.items.len / 3) != mesh.vertexCount) continue;
           
@@ -187,15 +198,18 @@ pub fn main() !void {
           std.debug.print("Triangle count: {}\n", .{mesh.triangleCount});
           std.debug.print("read_triangle_count -> read_indices transition\n", .{});
           mesh.indices = std.ArrayList(u16).init(allocator);
-          std.debug.print("Allocated space for indices\n", .{});
           state = .read_indices;
           _ = try connection_maybe.?.stream.write(&.{4});
         },
         .read_indices => {
-          _ = try connection_maybe.?.stream.reader().read(&buffers.abc_indices);
-          try mesh.indices.?.append(std.mem.bytesToValue(u16, buffers.abc_indices[2..4]));
-          try mesh.indices.?.append(std.mem.bytesToValue(u16, buffers.abc_indices[6..8]));
-          try mesh.indices.?.append(std.mem.bytesToValue(u16, buffers.abc_indices[10..12]));
+          var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.abc_indices);
+          var offset: usize = 0;
+          while (bytes_read > 0) : (bytes_read -= 4) {
+            // Could be an x, y or z coordinate
+            const index = std.mem.bytesToValue(u16, @as(*[2]u8, @ptrCast(buffers.abc_indices[offset..offset + 2])));
+            try mesh.indices.?.append(index);
+            offset += 4;
+          }
 
           if ((mesh.indices.?.items.len / 3) != mesh.triangleCount) continue;
           
@@ -204,6 +218,9 @@ pub fn main() !void {
           _ = try connection_maybe.?.stream.write(&.{5});
         },
         .load_model => {
+          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.ack);
+          if (bytes_read != 1 or buffers.ack[0] != 1) continue;
+
           // Unload previous model from VRAM. This unloads the model's mesh.
           // if (model_maybe) |model| { raylib.UnloadModel(model); }
 
@@ -211,9 +228,10 @@ pub fn main() !void {
           model_maybe = mesh.loadModel();
 
           state = .watch_start_magic_bytes;
-          std.debug.print("load_model  -> watch_start_magic_bytes transition\n", .{});
-          _ = try connection_maybe.?.stream.write(&.{0});
+          std.debug.print("load_model -> watch_start_magic_bytes transition\n", .{});
+          _ = try connection_maybe.?.stream.write(&.{6});
           connection_maybe.?.stream.close();
+          connection_maybe = null;
         },
       }
     }

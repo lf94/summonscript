@@ -17,14 +17,8 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
     console.log("Writing START_MAGIC_BYTES");
     client.write(START_MAGIC_BYTES, () => {});
     client.on('data', (chunk) => {
+      console.log(chunk[0]);
       switch (chunk[0]) {
-        case 0: {
-          console.log("Closing pipe");
-          client.destroy();
-          koffi.free(meshMemory);
-          resolve({ cur: currentResolution, next: targetResolution });
-          break;
-        }
         case 1: {
           console.log("START_MAGIC_BYTES Acknowledged");
           console.log("Writing vertex count");
@@ -36,15 +30,17 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
         case 2: {
           console.log("Vertex count Acknowledged");
           console.log("Writing vertices");
-          let buf;
           let pt;
+          let offset = 0;
+          const buf = Buffer.allocUnsafe(4 * 3 * verts.length);
           for (const vert of verts) {
-            buf = Buffer.allocUnsafe(4 * 3);
-            buf.writeFloatLE(vert.x, 0);
-            buf.writeFloatLE(vert.y, 4);
-            buf.writeFloatLE(vert.z, 8);
-            client.write(buf, () => {});
+            buf.writeFloatLE(vert.x, offset + 0);
+            buf.writeFloatLE(vert.y, offset + 4);
+            buf.writeFloatLE(vert.z, offset + 8);
+            offset += 12;
           }
+          client.write(buf, () => {});
+          koffi.free(mesh.verts);
           break;
         }
         case 3: {
@@ -59,21 +55,32 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
         case 4: {
           console.log("Triangle count Acknowledged");
           console.log("Writing indices");
-          let buf;
           let pt;
+          let offset = 0;
+          const buf = Buffer.allocUnsafe(4 * 3 * tris.length);
           for (const tri of tris) {
-            buf = Buffer.allocUnsafe(4 * 3);
-            buf.writeUInt32LE(tri.a, 0);
-            buf.writeUInt32LE(tri.b, 4);
-            buf.writeUInt32LE(tri.c, 8);
-            client.write(buf, () => {});
+            buf.writeUInt32LE(tri.a, offset + 0);
+            buf.writeUInt32LE(tri.b, offset + 4);
+            buf.writeUInt32LE(tri.c, offset + 8);
+            offset += 12;
           }
+          client.write(buf, () => {});
+          koffi.free(mesh.tris);
           break;
         }
-        // the viewer is loading the model now.
-        // we can close the connection.
         case 5: {
           console.log("Indices Acknowledged");
+          console.log("Acknowledging transition state change");
+          const buf = Buffer.allocUnsafe(1);
+          buf.writeUInt8(1);
+          client.write(buf, () => {});
+          break;
+        }
+        case 6: {
+          console.log("Closing pipe");
+          // client.destroy();
+          koffi.free(meshMemory);
+          resolve({ cur: currentResolution, next: targetResolution });
           break;
         }
       }
