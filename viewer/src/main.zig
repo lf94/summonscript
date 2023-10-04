@@ -1,6 +1,8 @@
 const std = @import("std");
 const raylib = @cImport(@cInclude("raylib.h"));
+const math = @cImport(@cInclude("raymath.h"));
 const fcntl = @cImport(@cInclude("fcntl.h"));
+const rlights = @import("rlights.zig");
 
 // When started, the program watches stdin for magic bytes that are randomly generated.
 // When finding this, then read in the number of incoming points so memory can
@@ -18,22 +20,32 @@ const State = enum {
   load_model,
 };
 
+fn convert(slice: []f32) []math.Vector3 {
+  var result: []math.Vector3 = &[0]math.Vector3{};
+  result.ptr = @ptrCast(slice.ptr);
+  result.len = slice.len / 3;
+  return result;
+}
+
 const Mesh = struct {
   isLoaded: bool = false,
   vertexCount: i32,
   triangleCount: i32,
   vertices: ?std.ArrayList(f32),
+  normals: ?std.ArrayList(f32),
   indices: ?std.ArrayList(u16),
   raylib: ?raylib.Mesh,
 
-  fn initRaylibMesh(self: *@This()) void {
+  fn initRaylibMesh(self: *@This(), allocator: std.mem.Allocator) !void {
     self.raylib = .{
       .vertexCount = self.vertexCount,
       .triangleCount = self.triangleCount,
       .vertices = @ptrCast(self.vertices.?.items),
       .texcoords = null,
       .texcoords2 = null,
-      .normals = null,
+      .normals = @ptrCast(try computeNormals(allocator,
+                                             convert(self.vertices.?.items),
+                                             self.indices.?.items)),
       .tangents = null,
       .colors = null,
       .indices = @ptrCast(self.indices.?.items),
@@ -46,10 +58,15 @@ const Mesh = struct {
     };
   }
 
-  fn loadModel(self: *@This()) raylib.Model {
-    self.initRaylibMesh();
+  fn loadModel(self: *@This(),
+               allocator: std.mem.Allocator,
+               shader: raylib.Shader) !raylib.Model {
+    try self.initRaylibMesh(allocator);
     raylib.UploadMesh(&self.raylib.?, true);
-    return raylib.LoadModelFromMesh(self.raylib.?);
+    var model = raylib.LoadModelFromMesh(self.raylib.?);
+    // Do this so that DrawMesh will send the material's data to  shader.
+    model.materials[0].shader = shader;
+    return model;
   }
 };
 
@@ -76,6 +93,24 @@ pub fn main() !void {
     .fovy = 45.0, // Camera field-of-view Y
     .projection = raylib.CAMERA_PERSPECTIVE, // Camera mode type
   };
+
+  // Load basic lighting shader.
+  var shader = raylib.LoadShader("viewer/src/shaders/lighting.vs",
+                                 "viewer/src/shaders/lighting.fs");
+
+  // Get shader location for camera position.
+  shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] = raylib.GetShaderLocation(shader, "viewPos");
+
+  // Ambient light level.
+  var ambientLoc = raylib.GetShaderLocation(shader, "ambient");
+  var v: raylib.Vector4 = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
+  raylib.SetShaderValue(shader, ambientLoc, &v,
+                        raylib.SHADER_UNIFORM_VEC4);
+
+  // Create point light source.
+  var light: rlights.Light =
+    rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 5.0 },
+                        @bitCast(math.Vector3Zero()), raylib.YELLOW, shader).?;
 
   raylib.SetTargetFPS(60);
 
@@ -110,6 +145,7 @@ pub fn main() !void {
     .vertexCount = 0,
     .triangleCount = 0,
     .vertices = null,
+    .normals = null,
     .indices = null,
     .raylib = null,
   };
@@ -132,6 +168,10 @@ pub fn main() !void {
   while (!raylib.WindowShouldClose()) {
     if (state == .watch_start_magic_bytes) {
       raylib.UpdateCamera(&camera, raylib.CAMERA_FREE);
+      
+      // Send camera position to shader.
+      raylib.SetShaderValue(shader, shader.locs[raylib.SHADER_LOC_VECTOR_VIEW],
+                            &camera.position, raylib.SHADER_UNIFORM_VEC3);
 
       raylib.BeginDrawing();
       raylib.ClearBackground(raylib.BLACK);
@@ -139,9 +179,15 @@ pub fn main() !void {
       raylib.BeginMode3D(camera);
 
       if (model_maybe) |model| {
+        // Rotate model.
+        model_maybe.?.transform =
+          @bitCast(math.MatrixMultiply(math.MatrixRotateZ(0.01), @bitCast(model.transform)));
         raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.GRAY);
       }
-
+      
+      // Draw little sphere at light source.
+      raylib.DrawSphereWires(light.position, 0.2, 8, 8, raylib.ColorAlpha(light.color, 0.3));
+      
       raylib.EndMode3D();
       raylib.EndDrawing();
     }
@@ -225,7 +271,7 @@ pub fn main() !void {
           // if (model_maybe) |model| { raylib.UnloadModel(model); }
 
           // Create the new mesh/model from the streamed data
-          model_maybe = mesh.loadModel();
+          model_maybe = try mesh.loadModel(allocator, shader);
 
           state = .watch_start_magic_bytes;
           std.debug.print("load_model -> watch_start_magic_bytes transition\n", .{});
@@ -236,4 +282,34 @@ pub fn main() !void {
       }
     }
   }
+}
+
+// For each vertex, look for all triangles that use that
+// vertex. Calculate vectors orthonormal to each triangle's face and
+// take the average of those vectors as the overall normal for the vertex.
+fn computeNormals(allocator: std.mem.Allocator,
+                  vertices: []math.Vector3,
+                  indices: []u16) ![]math.Vector3 {
+  // One normal per vertex.
+  var normals = try allocator.alloc(math.Vector3, vertices.len);
+
+  // For each vertex v_i
+  for (0..vertices.len) |i| {
+    var sum = math.Vector3Zero();
+
+    // For each triangle (triplet of indices)
+    for (0..indices.len / 3) |j| {
+      // If any vertex of the triangle is v_i,
+      // compute perpendicular vector and append it to vecs.
+      if (indices[3 * j] == i or indices[3 * j + 1] == i or indices[3 * j + 2] == i) {
+        sum = math.Vector3Add(sum, math.Vector3Normalize(math.Vector3CrossProduct(
+          math.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
+          math.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]]))));
+      }
+    }
+
+    normals[i] = math.Vector3Normalize(sum);
+  }
+
+  return normals;
 }
