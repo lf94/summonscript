@@ -88,15 +88,15 @@ pub fn main() !void {
   // Define the camera to look into our 3d world
   var camera = raylib.Camera3D{
     .position = .{ .x = 0.0, .y = -25.0, .z = 5.0 }, // Camera position
-    .target = .{ .x = 0.0, .y = 0.0, .z = 0.0 }, // Camera looking at point
-    .up = .{ .x = 0.0, .y = 0.0, .z = 1.0 }, // Camera up vector (rotation towards target)
+    .target   = .{ .x = 0.0, .y =   0.0, .z = 0.0 }, // Camera looking at point
+    .up       = .{ .x = 0.0, .y =   0.0, .z = 1.0 }, // Camera up vector (rotation towards target)
     .fovy = 45.0, // Camera field-of-view Y
     .projection = raylib.CAMERA_PERSPECTIVE, // Camera mode type
   };
 
   // Load basic lighting shader.
-  var shader = raylib.LoadShader("viewer/src/shaders/lighting.vs",
-                                 "viewer/src/shaders/lighting.fs");
+  var shader = raylib.LoadShader("./src/shaders/lighting.vs",
+                                 "./src/shaders/lighting.fs");
 
   // Get shader location for camera position.
   shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] = raylib.GetShaderLocation(shader, "viewPos");
@@ -110,7 +110,7 @@ pub fn main() !void {
   // Create point light source.
   var light: rlights.Light =
     rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 5.0 },
-                        @bitCast(math.Vector3Zero()), raylib.YELLOW, shader).?;
+                        @bitCast(math.Vector3Zero()), raylib.WHITE, shader).?;
 
   raylib.SetTargetFPS(60);
 
@@ -174,7 +174,7 @@ pub fn main() !void {
                             &camera.position, raylib.SHADER_UNIFORM_VEC3);
 
       raylib.BeginDrawing();
-      raylib.ClearBackground(raylib.BLACK);
+      raylib.ClearBackground(raylib.WHITE);
       
       raylib.BeginMode3D(camera);
 
@@ -225,6 +225,7 @@ pub fn main() !void {
         .read_vertices => {
           var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
           var offset: usize = 0;
+
           while (bytes_read > 0) : (bytes_read -= 4) {
             // Could be an x, y or z coordinate
             const coord = std.mem.bytesToValue(f32, @as(*[4]u8, @ptrCast(buffers.xyz_coords[offset..offset + 4])));
@@ -265,6 +266,8 @@ pub fn main() !void {
         },
         .load_model => {
           const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.ack);
+
+          // If there's no acknowledge byte, skip this until we get one.
           if (bytes_read != 1 or buffers.ack[0] != 1) continue;
 
           // Unload previous model from VRAM. This unloads the model's mesh.
@@ -283,37 +286,6 @@ pub fn main() !void {
     }
   }
 }
-
-// REFERENCE IMPLEMENTATION: slower but more obviously correct.
-// // For each vertex, look for all triangles that use that
-// // vertex. Calculate vectors orthonormal to each triangle's face and
-// // take the average of those vectors as the overall normal for the vertex.
-// fn computeNormals(allocator: std.mem.Allocator,
-//                   vertices: []math.Vector3,
-//                   indices: []u16) ![]math.Vector3 {
-//   // One normal per vertex.
-//   var normals = try allocator.alloc(math.Vector3, vertices.len);
-
-//   // For each vertex v_i
-//   for (0..vertices.len) |i| {
-//     var sum = math.Vector3Zero();
-
-//     // For each triangle (triplet of indices)
-//     for (0..indices.len / 3) |j| {
-//       // If any vertex of the triangle is v_i,
-//       // compute perpendicular vector and append it to vecs.
-//       if (indices[3 * j] == i or indices[3 * j + 1] == i or indices[3 * j + 2] == i) {
-//         sum = math.Vector3Add(sum, math.Vector3Normalize(math.Vector3CrossProduct(
-//           math.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
-//           math.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]]))));
-//       }
-//     }
-
-//     normals[i] = math.Vector3Normalize(sum);
-//   }
-
-//   return normals;
-// }
 
 fn computeNormals(allocator: std.mem.Allocator,
                   vertices: []math.Vector3,

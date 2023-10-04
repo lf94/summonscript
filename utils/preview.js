@@ -6,7 +6,7 @@ const { toMesh } = require("../index");
 const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
   const p = new Promise((resolve, reject) => {
     console.log("Resolution: " + currentResolution);
-    const meshMemory = toMesh(sdf(), boundingBox, currentResolution);
+    const meshMemory = toMesh(sdf, boundingBox, currentResolution);
     console.log("Meshed");
     const mesh = koffi.decode(meshMemory, "libfive_mesh");
     const verts = koffi.decode(mesh.verts, "libfive_vec3", mesh.vert_count);

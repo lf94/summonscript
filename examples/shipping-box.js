@@ -1,6 +1,7 @@
 // Parametric shipping box!
 
-const { box, saveAsSTL,toMesh,  mm, cm } = require("../index.js");
+const { preview } = require("../utils/preview");
+const { box, mm, cm } = require("../index.js");
 
 // Modify the parameters to get a box that fits your needs.
 const dimensions = [5*cm, 5*cm, 5*cm];
@@ -14,32 +15,31 @@ const floorThickness = printer.layerHeight * 3;
 const rounding = 0.1;
 const offset = { rounding: 0.5*cm, };
 
-const base = box.smooth([0,0,0], dimensions, rounding);
+const base = box.exact(dimensions, rounding);
 
-const bottomCut = box.exact([0,0,0], [dimensions[0], dimensions[1], offset.rounding], false);
+const bottomCut = box.exact([dimensions[0], dimensions[1], offset.rounding], false);
 
-const cutout = box.smooth(
-  [wallThickness, wallThickness, floorThickness],
+const cutout = box.exact(
   [
     dimensions[0] - wallThickness,
     dimensions[1] - wallThickness,
     (dimensions[2] - floorThickness) - offset.rounding
   ],
   rounding
-);
+).move([wallThickness, wallThickness, floorThickness]);
 
 const clip = {
   xAxis: [Math.sqrt(dimensions[0]), wallThickness*2, Math.sqrt(dimensions[2])],
   yAxis: [wallThickness*2, Math.sqrt(dimensions[1]), Math.sqrt(dimensions[2])],
 };
 
-const clipXAxisNear = box.exact([0,0,0], clip.xAxis, false)
+const clipXAxisNear = box.exact(clip.xAxis, false)
   .move([(dimensions[0] - clip.xAxis[0]) / 2, wallThickness/2, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
-const clipXAxisFar = box.exact([0,0,0], clip.xAxis, false)
+const clipXAxisFar = box.exact(clip.xAxis, false)
   .move([(dimensions[0] - clip.xAxis[0]) / 2, dimensions[1] - wallThickness - clip.xAxis[1]/2, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
-const clipYAxisNear = box.exact([0,0,0], clip.yAxis, false)
+const clipYAxisNear = box.exact(clip.yAxis, false)
   .move([wallThickness/2, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
-const clipYAxisFar = box.exact([0,0,0], clip.yAxis, false)
+const clipYAxisFar = box.exact(clip.yAxis, false)
   .move([dimensions[0] - wallThickness - clip.yAxis[0]/2, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
 
 const clips = clipXAxisFar.union(clipXAxisNear).union(clipYAxisFar).union(clipYAxisNear);
@@ -70,5 +70,5 @@ const shippingBoxBottom = base
 
 const result = shippingBoxTop;
 
-saveAsSTL(result, [[0,0,0], dimensions], 1, "shipping-box.stl");
+preview(result, [[0,0,0], dimensions], 1, 4);
 //saveAsSTL(shippingBoxTop, [[0,0,0], dimensions], 1, "shipping-box-top.stl");

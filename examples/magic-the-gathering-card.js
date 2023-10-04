@@ -1,6 +1,7 @@
 // A playing card, with the dimensions of Magic the Gathering cards.
 // Print with a 0.1mm height!
 
+const { preview } = require("../utils/preview");
 const { box,mm,deg,saveAsSTL,print2d,textFitToArea } = require("../index");
 
 const layout = {
@@ -23,7 +24,7 @@ const layout = {
   }
 };
 
-const base2d = box.rounded([layout.card.w, layout.card.l], layout.card.r);
+const base2d = box.roundedZ([layout.card.w, layout.card.l], layout.card.r);
 const base3d = base2d.extrudeZ(0, layout.card.h);
 
 const title2d = print2d("The Professor\nKeeper of Knowledge");
@@ -44,7 +45,7 @@ const text3d = title3d.move(layout.title().position)
   .union(desc3d.move(layout.desc().position));
 
 const card3d = base3d.difference(text3d);
+const result = text3d //.rotateY(180*deg);
 
 const region = [100,100,100];
-saveAsSTL(card3d.rotateY(180*deg), [region.mul(-1), region], 10.0, "magic-the-gathering-card.stl");
-saveAsSTL(text3d.rotateY(180*deg), [region.mul(-1), region], 10.0, "magic-the-gathering-card-text.stl");
+preview(() => result, [region.mul(-1), region], 2, 4);

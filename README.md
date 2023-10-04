@@ -45,7 +45,7 @@ the viewer and opens a new file. On save, it runs the script so the viewer updat
 
 ## Background
 
-This system falls into the realm of [code CAD](https://learn.cadhub.xyz/blog/curated-code-cad/").
+This system falls into the realm of [code CAD](https://learn.cadhub.xyz/blog/curated-code-cad/).
 
 Why another code CAD system? Simple, because systems like OpenSCAD, Cadquery, replicad,
 and basically everything else cannot describe or handle complex models.

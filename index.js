@@ -8,6 +8,9 @@ const {
   libfive_tree_save_slice,
 } = require("./libfive.js");
 
+// Unfortunately this one is complex.
+const { text } = require("./libfive-stdlib.js");
+
 //
 // Our wrapper API
 // 
@@ -162,6 +165,12 @@ const elongate = (shape, hs) =>  {
   const q = abs(xyz).sub(hs).value;
   const q2 = [max(q[0], 0), max(q[1], 0), max(q[2], 0)];
   return shape.remap(q2[0], q2[1], q2[2]).add(min(max(q[0],max(q[1],q[2])),0.0));
+};
+
+const scale_x = (shape, a_) => {
+  const [x,y,z] = XYZ();
+  const a = toLibfiveValue(a_);
+  return shape.remap(x.div(a), y, z);
 };
 
 const scale_y = (shape, a_) => {

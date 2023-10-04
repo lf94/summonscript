@@ -1,4 +1,5 @@
-const { cube, nothing, saveAsSTL } = require("../index.js");
+const { preview } = require("../utils/preview");
+const { box, sphere, nothing } = require("../index.js");
 
 // Recreate Day 5 of Scadvent 2021
 const tetrominos = [
@@ -27,7 +28,7 @@ const ts = tetrominos.map((t) => {
       const h = t[y][x];
       if (h !== 0)  {
         for (let z = 0; z < h; z += 1) {
-          result = result.union(cube.exact(1, [x, y, z]));
+          result = result.union(box.exact([1, 1, 1]).move([x,y,z]));
         }
       }
     }
@@ -35,6 +36,12 @@ const ts = tetrominos.map((t) => {
   return result;
 });
 
-const result = ts.reduce((result, cur, index) => result.union(cur.move(index * 5, 0, 0)), nothing()); 
-const r = [[0, -10, -10], [ts.length * 5, 10.0, 10.0]];
-saveAsSTL(result, r, 10, "out.stl");
+const result = ts.reduce(
+  (result, cur, index) => {
+    console.log(result, cur);
+    return result.union(cur.move([index * 5, 0, 0]));
+  }, nothing()
+);
+
+const r = [[ts.length * -5, -10, -10], [ts.length * 5, 10.0, 10.0]];
+preview(result.move([ts.length * -2.5, 0, 0]), r, 1, 4);

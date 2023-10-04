@@ -29,7 +29,7 @@ const d = {
 
 const base = () => capsule(d.height-d.dia, d.dia).elongate([0, 0.5, 0]);
 const neck = () => cone.capped(d.neck().height, 6*mm, 4*mm);
-const peg =  () => cone.elongated(d.peg().height, d.peg().d1, d.peg().d2, [2, 0, 0]).rotateY(-90*deg);
+const peg = () => cone.elongated(d.peg().height, d.peg().d1, d.peg().d2, [2, 0, 0]).rotateY(-90*deg);
 const result = () => base()
   .union(neck().move(d.neck().xyz()), 1*mm)
   .union(neck().rotateY(180*deg).move(d.neck().xyz().mul(-1)), 1*mm)
