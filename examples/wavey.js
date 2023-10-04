@@ -1,4 +1,5 @@
-const { saveAsSTL, deg, box, half_space, X, Y, Z, sin, cos } = require("node-libfive");
+const { preview } = require("../utils/preview");
+const { saveAsSTL, deg, box, half_space, X, Y, Z, sin, cos } = require("../index");
 
 const wavey = (shape, frequency, amplitude) => {
   const [x,y,z] = [X(), Y(), Z()];
@@ -11,6 +12,6 @@ const result =
 
 const r_1 = [20,20,20];
 const region = [r_1.mul(-1), r_1];
-console.log("saving wavey");
-saveAsSTL(result, region, 2, "wavey.stl");
+preview(result, region, 1, 4);
+// saveAsSTL(result, region, 4, "wavey.stl");
 

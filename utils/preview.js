@@ -32,14 +32,14 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
           console.log("Writing vertices");
           let pt;
           let offset = 0;
-          const buf = Buffer.allocUnsafe(4 * 3 * verts.length);
           for (const vert of verts) {
+            const buf = Buffer.allocUnsafe(4 * 3);
             buf.writeFloatLE(vert.x, offset + 0);
             buf.writeFloatLE(vert.y, offset + 4);
             buf.writeFloatLE(vert.z, offset + 8);
-            offset += 12;
+            offset += 0;
+            client.write(buf, () => {});
           }
-          client.write(buf, () => {});
           koffi.free(mesh.verts);
           break;
         }
@@ -57,14 +57,14 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
           console.log("Writing indices");
           let pt;
           let offset = 0;
-          const buf = Buffer.allocUnsafe(4 * 3 * tris.length);
           for (const tri of tris) {
+            const buf = Buffer.allocUnsafe(4 * 3);
             buf.writeUInt32LE(tri.a, offset + 0);
             buf.writeUInt32LE(tri.b, offset + 4);
             buf.writeUInt32LE(tri.c, offset + 8);
-            offset += 12;
+            offset += 0;
+            client.write(buf, () => {});
           }
-          client.write(buf, () => {});
           koffi.free(mesh.tris);
           break;
         }

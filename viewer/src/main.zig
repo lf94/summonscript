@@ -109,7 +109,7 @@ pub fn main() !void {
 
   // Create point light source.
   var light: rlights.Light =
-    rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 5.0 },
+    rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 100.0 },
                         @bitCast(math.Vector3Zero()), raylib.WHITE, shader).?;
 
   raylib.SetTargetFPS(60);
@@ -166,7 +166,7 @@ pub fn main() !void {
   var connection_maybe: ?std.net.StreamServer.Connection = null;
 
   while (!raylib.WindowShouldClose()) {
-    if (state == .watch_start_magic_bytes) {
+    if (model_maybe) |model| {
       raylib.UpdateCamera(&camera, raylib.CAMERA_FREE);
       
       // Send camera position to shader.
@@ -178,12 +178,10 @@ pub fn main() !void {
       
       raylib.BeginMode3D(camera);
 
-      if (model_maybe) |model| {
-        // Rotate model.
-        model_maybe.?.transform =
-          @bitCast(math.MatrixMultiply(math.MatrixRotateZ(0.01), @bitCast(model.transform)));
-        raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.GRAY);
-      }
+      // Rotate model.
+      model_maybe.?.transform =
+        @bitCast(math.MatrixMultiply(math.MatrixRotateZ(0.01), @bitCast(model.transform)));
+      raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.BLUE);
       
       // Draw little sphere at light source.
       raylib.DrawSphereWires(light.position, 0.2, 8, 8, raylib.ColorAlpha(light.color, 0.3));
