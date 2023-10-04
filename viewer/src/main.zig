@@ -284,31 +284,59 @@ pub fn main() !void {
   }
 }
 
-// For each vertex, look for all triangles that use that
-// vertex. Calculate vectors orthonormal to each triangle's face and
-// take the average of those vectors as the overall normal for the vertex.
+// REFERENCE IMPLEMENTATION: slower but more obviously correct.
+// // For each vertex, look for all triangles that use that
+// // vertex. Calculate vectors orthonormal to each triangle's face and
+// // take the average of those vectors as the overall normal for the vertex.
+// fn computeNormals(allocator: std.mem.Allocator,
+//                   vertices: []math.Vector3,
+//                   indices: []u16) ![]math.Vector3 {
+//   // One normal per vertex.
+//   var normals = try allocator.alloc(math.Vector3, vertices.len);
+
+//   // For each vertex v_i
+//   for (0..vertices.len) |i| {
+//     var sum = math.Vector3Zero();
+
+//     // For each triangle (triplet of indices)
+//     for (0..indices.len / 3) |j| {
+//       // If any vertex of the triangle is v_i,
+//       // compute perpendicular vector and append it to vecs.
+//       if (indices[3 * j] == i or indices[3 * j + 1] == i or indices[3 * j + 2] == i) {
+//         sum = math.Vector3Add(sum, math.Vector3Normalize(math.Vector3CrossProduct(
+//           math.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
+//           math.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]]))));
+//       }
+//     }
+
+//     normals[i] = math.Vector3Normalize(sum);
+//   }
+
+//   return normals;
+// }
+
 fn computeNormals(allocator: std.mem.Allocator,
                   vertices: []math.Vector3,
                   indices: []u16) ![]math.Vector3 {
   // One normal per vertex.
   var normals = try allocator.alloc(math.Vector3, vertices.len);
+  for (0..normals.len) |i| {
+    normals[i] = math.Vector3Zero();
+  }
 
-  // For each vertex v_i
-  for (0..vertices.len) |i| {
-    var sum = math.Vector3Zero();
+  // For each triangle (triplet of indices)
+  for (0..indices.len / 3) |j| {
+    const v = math.Vector3Normalize(math.Vector3CrossProduct(
+      math.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
+      math.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]])));
+    normals[indices[3 * j]] = math.Vector3Add(normals[indices[3 * j]], v);
+    normals[indices[3 * j + 1]] = math.Vector3Add(normals[indices[3 * j + 1]], v);
+    normals[indices[3 * j + 2]] = math.Vector3Add(normals[indices[3 * j + 2]], v);
+  }
 
-    // For each triangle (triplet of indices)
-    for (0..indices.len / 3) |j| {
-      // If any vertex of the triangle is v_i,
-      // compute perpendicular vector and append it to vecs.
-      if (indices[3 * j] == i or indices[3 * j + 1] == i or indices[3 * j + 2] == i) {
-        sum = math.Vector3Add(sum, math.Vector3Normalize(math.Vector3CrossProduct(
-          math.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
-          math.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]]))));
-      }
-    }
-
-    normals[i] = math.Vector3Normalize(sum);
+  // This has the effect of averaging the normals.
+  for (0..normals.len) |i| {
+    normals[i] = math.Vector3Normalize(normals[i]);
   }
 
   return normals;
