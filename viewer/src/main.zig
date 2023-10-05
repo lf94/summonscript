@@ -1,6 +1,6 @@
 const std = @import("std");
 const raylib = @cImport(@cInclude("raylib.h"));
-const math = @cImport(@cInclude("raymath.h"));
+const raymath = @cImport(@cInclude("raymath.h"));
 const fcntl = @cImport(@cInclude("fcntl.h"));
 const rlights = @import("rlights.zig");
 
@@ -20,8 +20,8 @@ const State = enum {
   load_model,
 };
 
-fn convert(slice: []f32) []math.Vector3 {
-  var result: []math.Vector3 = &[0]math.Vector3{};
+fn convert(slice: []f32) []raymath.Vector3 {
+  var result: []raymath.Vector3 = &[0]raymath.Vector3{};
   result.ptr = @ptrCast(slice.ptr);
   result.len = slice.len / 3;
   return result;
@@ -72,6 +72,67 @@ const Mesh = struct {
 
 pub const options_override = .{ .io_mode = .evented };
 
+pub fn Delta(comptime T: type) type {
+  return struct { last: T, current: T };
+}
+
+pub fn Vector3Distance(a: raylib.Vector3, b: raylib.Vector3) f32 {
+  const d1 = a.x - b.x;
+  const d2 = a.y - b.y;
+  const d3 = a.z - b.z;
+  return std.math.sqrt(d1*d1 + d2*d2 + d3*d3);
+}
+
+pub fn updateCamera(camera: *Delta(raylib.Camera3D), mouse_delta: *Delta(raylib.Vector2)) void {
+  const key_pressed = raylib.GetKeyPressed();
+  switch (key_pressed) {
+    raylib.KEY_SPACE => camera.last.position = CAMERA_INITIAL_POSITION,
+    raylib.KEY_UP => camera.last.position = .{ .x = 0.0, .y = 0.0, .z = 25.0 },
+    raylib.KEY_DOWN => camera.last.position = .{ .x = 0.0, .y = 0.0, .z = -25.0 },
+    raylib.KEY_LEFT => camera.last.position = .{ .x = -25.0, .y = 0.0, .z = 0.0 },
+    raylib.KEY_RIGHT => camera.last.position = .{ .x = 25.0, .y = 0.0, .z = 0.0 },
+    else => {},
+  }
+
+  if (key_pressed != 0) { camera.current = camera.last; }
+
+  if (raylib.IsMouseButtonDown(raylib.MOUSE_BUTTON_LEFT)) {
+    const delta = .{
+      .x = (mouse_delta.last.x - mouse_delta.current.x) / 640.0,
+      .y = (mouse_delta.current.y - mouse_delta.last.y) / 480.0,
+    };
+
+    const deg: f32 = (2.0 * std.math.pi)/360.0;
+    const da = std.math.atan2(f32, camera.last.position.y, camera.last.position.x);
+
+    const dist = Vector3Distance(camera.last.position, .{ .x = 0, .y = 0, .z = 0 });
+    const db = std.math.sign(camera.last.position.z) * std.math.acos(camera.last.position.z / dist);
+
+    const dxa = da + (180*deg)*delta.x;
+    const dya = db + (180*deg)*delta.y;
+
+    const mx = std.math.cos(dxa) * std.math.cos(dya);
+    const my = std.math.sin(dxa) * std.math.cos(dya);
+
+    const mz = std.math.sin(dya);
+
+    camera.current.position.x = dist * mx;
+    camera.current.position.y = dist * my;
+    camera.current.position.z = dist * mz;
+  } else {
+    // Important - updates the mouse position to prepare it for the next click
+    // that we want to start dragging.
+    mouse_delta.last = mouse_delta.current;
+  }
+
+  if (raylib.IsMouseButtonReleased(raylib.MOUSE_BUTTON_LEFT)) {
+    mouse_delta.last = mouse_delta.current;
+    camera.last = camera.current;
+  }
+}
+
+pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
+
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
   var allocator = gpa.allocator();
@@ -86,12 +147,17 @@ pub fn main() !void {
   defer raylib.CloseWindow();
 
   // Define the camera to look into our 3d world
-  var camera = raylib.Camera3D{
-    .position = .{ .x = 0.0, .y = -25.0, .z = 5.0 }, // Camera position
+  const CAMERA_INITIAL = raylib.Camera3D {
+    .position = CAMERA_INITIAL_POSITION, // Camera position
     .target   = .{ .x = 0.0, .y =   0.0, .z = 0.0 }, // Camera looking at point
     .up       = .{ .x = 0.0, .y =   0.0, .z = 1.0 }, // Camera up vector (rotation towards target)
     .fovy = 45.0, // Camera field-of-view Y
     .projection = raylib.CAMERA_PERSPECTIVE, // Camera mode type
+  };
+
+  var camera = Delta(raylib.Camera3D) {
+    .last = CAMERA_INITIAL,
+    .current = CAMERA_INITIAL,
   };
 
   // Load basic lighting shader.
@@ -108,9 +174,8 @@ pub fn main() !void {
                         raylib.SHADER_UNIFORM_VEC4);
 
   // Create point light source.
-  var light: rlights.Light =
-    rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 100.0 },
-                        @bitCast(math.Vector3Zero()), raylib.WHITE, shader).?;
+  _ = rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 100.0 },
+                        @bitCast(raymath.Vector3Zero()), raylib.WHITE, shader).?;
 
   raylib.SetTargetFPS(60);
 
@@ -127,7 +192,7 @@ pub fn main() !void {
     magic_bytes: [START_MAGIC_BYTES.len]u8,
     vertex_count: [@sizeOf(u32)]u8,
     triangle_count: [@sizeOf(u32)]u8,
-    // Try to saturate internal Linux sockets (we go with 4k since memory pages are usually this size)
+    // Try to saturate internal Linux sockets
     xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
     abc_indices: [ABC_INDICES_SIZE_BYTES]u8,
   };
@@ -165,30 +230,41 @@ pub fn main() !void {
   _ = fcntl.fcntl(sockfd, fcntl.F_SETFL, flags | fcntl.O_NONBLOCK);
   var connection_maybe: ?std.net.StreamServer.Connection = null;
 
+  var mouse_delta: Delta(raylib.Vector2) = .{
+    .last = .{ .x = 0, .y = 0 },
+    .current = .{ .x = 0, .y = 0 },
+  };
+
+  var firstFrame: bool = true;
+
   while (!raylib.WindowShouldClose()) {
-    if (model_maybe) |model| {
-      raylib.UpdateCamera(&camera, raylib.CAMERA_FREE);
-      
-      // Send camera position to shader.
-      raylib.SetShaderValue(shader, shader.locs[raylib.SHADER_LOC_VECTOR_VIEW],
-                            &camera.position, raylib.SHADER_UNIFORM_VEC3);
+    const mp = raylib.GetMousePosition();
 
-      raylib.BeginDrawing();
-      raylib.ClearBackground(raylib.WHITE);
-      
-      raylib.BeginMode3D(camera);
-
-      // Rotate model.
-      model_maybe.?.transform =
-        @bitCast(math.MatrixMultiply(math.MatrixRotateZ(0.01), @bitCast(model.transform)));
-      raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.BLUE);
-      
-      // Draw little sphere at light source.
-      raylib.DrawSphereWires(light.position, 0.2, 8, 8, raylib.ColorAlpha(light.color, 0.3));
-      
-      raylib.EndMode3D();
-      raylib.EndDrawing();
+    if (firstFrame) {
+      mouse_delta.last = mp;
+      firstFrame = false;
     }
+
+    mouse_delta.current = mp;
+    
+    // Our custom input handling that affects the camera
+    updateCamera(&camera, &mouse_delta);
+    
+    // Send camera position to shader.
+    raylib.SetShaderValue(shader, shader.locs[raylib.SHADER_LOC_VECTOR_VIEW],
+                          &camera.current.position, raylib.SHADER_UNIFORM_VEC3);
+
+    raylib.BeginDrawing();
+    raylib.ClearBackground(raylib.WHITE);
+    
+    raylib.BeginMode3D(camera.current);
+
+    if (model_maybe) |model| {
+      raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.BLUE);
+    }
+    
+    raylib.EndMode3D();
+    raylib.EndDrawing();
 
     blk: {
       switch (state) {
@@ -286,27 +362,27 @@ pub fn main() !void {
 }
 
 fn computeNormals(allocator: std.mem.Allocator,
-                  vertices: []math.Vector3,
-                  indices: []u16) ![]math.Vector3 {
+                  vertices: []raymath.Vector3,
+                  indices: []u16) ![]raymath.Vector3 {
   // One normal per vertex.
-  var normals = try allocator.alloc(math.Vector3, vertices.len);
+  var normals = try allocator.alloc(raymath.Vector3, vertices.len);
   for (0..normals.len) |i| {
-    normals[i] = math.Vector3Zero();
+    normals[i] = raymath.Vector3Zero();
   }
 
   // For each triangle (triplet of indices)
   for (0..indices.len / 3) |j| {
-    const v = math.Vector3Normalize(math.Vector3CrossProduct(
-      math.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
-      math.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]])));
-    normals[indices[3 * j]] = math.Vector3Add(normals[indices[3 * j]], v);
-    normals[indices[3 * j + 1]] = math.Vector3Add(normals[indices[3 * j + 1]], v);
-    normals[indices[3 * j + 2]] = math.Vector3Add(normals[indices[3 * j + 2]], v);
+    const v = raymath.Vector3Normalize(raymath.Vector3CrossProduct(
+      raymath.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
+      raymath.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]])));
+    normals[indices[3 * j]] = raymath.Vector3Add(normals[indices[3 * j]], v);
+    normals[indices[3 * j + 1]] = raymath.Vector3Add(normals[indices[3 * j + 1]], v);
+    normals[indices[3 * j + 2]] = raymath.Vector3Add(normals[indices[3 * j + 2]], v);
   }
 
   // This has the effect of averaging the normals.
   for (0..normals.len) |i| {
-    normals[i] = math.Vector3Normalize(normals[i]);
+    normals[i] = raymath.Vector3Normalize(normals[i]);
   }
 
   return normals;

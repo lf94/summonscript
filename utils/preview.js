@@ -22,6 +22,7 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
         case 1: {
           console.log("START_MAGIC_BYTES Acknowledged");
           console.log("Writing vertex count");
+          console.log(mesh.vert_count);
           const buf = Buffer.allocUnsafe(4);
           buf.writeUInt32LE(mesh.vert_count);
           client.write(buf, () => {});
@@ -78,7 +79,7 @@ const preview = (sdf, boundingBox, currentResolution, targetResolution) => {
         }
         case 6: {
           console.log("Closing pipe");
-          // client.destroy();
+          client.destroy();
           koffi.free(meshMemory);
           resolve({ cur: currentResolution, next: targetResolution });
           break;

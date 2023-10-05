@@ -12,6 +12,6 @@ const result =
 
 const r_1 = [20,20,20];
 const region = [r_1.mul(-1), r_1];
-preview(result, region, 1, 4);
+preview(result, region, 1, 2);
 // saveAsSTL(result, region, 4, "wavey.stl");
 
