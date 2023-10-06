@@ -94,6 +94,15 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
     else => {},
   }
 
+  const mouse_scroll = raylib.GetMouseWheelMove();
+  if (mouse_scroll != 0) {
+    const s = 1 - (mouse_scroll * 0.1); // 0.1 is just a scroll scaling factor
+    camera.position = raylib.Vector3Transform(
+      camera.position,
+      raylib.MatrixScale(s, s, s)
+    );
+  }
+
   if (raylib.IsMouseButtonDown(raylib.MOUSE_BUTTON_LEFT)) {
     var mouse_delta = raylib.GetMouseDelta();
     const deg: f32 = (2.0 * std.math.pi)/360.0;
