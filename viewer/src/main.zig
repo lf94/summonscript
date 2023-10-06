@@ -83,13 +83,6 @@ const Mesh = struct {
     model.materials[0].shader = shader;
     return model;
   }
-
-  fn unloadModel(
-    self: *@This(),
-    //model: raylib.Model,
-  ) void {
-    raylib.UnloadMesh(self.raylib.?);
-  }
 };
 
 pub const options_override = .{ .io_mode = .evented };
@@ -149,9 +142,6 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
 }
 
 pub fn main() !void {
-  var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-  var allocator = gpa.allocator();
-
   const screen = .{
     .width = 640,
     .height = 480,
@@ -287,7 +277,7 @@ pub fn main() !void {
           mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
           std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
           std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
-          mesh.vertices = std.ArrayList(f32).init(allocator);
+          mesh.vertices = std.ArrayList(f32).init(std.heap.raw_c_allocator);
           state = .read_vertices;
           _ = try connection_maybe.?.stream.write(&.{2});
         },
@@ -313,7 +303,7 @@ pub fn main() !void {
           mesh.triangleCount = std.mem.bytesToValue(i32, &buffers.triangle_count);
           std.debug.print("Triangle count: {}\n", .{mesh.triangleCount});
           std.debug.print("read_triangle_count -> read_indices transition\n", .{});
-          mesh.indices = std.ArrayList(u16).init(allocator);
+          mesh.indices = std.ArrayList(u16).init(std.heap.raw_c_allocator);
           state = .read_indices;
           _ = try connection_maybe.?.stream.write(&.{4});
         },
@@ -340,10 +330,10 @@ pub fn main() !void {
           if (bytes_read != 1 or buffers.ack[0] != 1) continue;
 
           // Unload previous model from VRAM. This unloads the model's mesh.
-          if (model_maybe) |_| { mesh.unloadModel(); }
+          if (model_maybe) |model| { raylib.UnloadModel(model); }
 
           // Create the new mesh/model from the streamed data
-          model_maybe = try mesh.loadModel(allocator, shader);
+          model_maybe = try mesh.loadModel(std.heap.raw_c_allocator, shader);
 
           state = .watch_start_magic_bytes;
           std.debug.print("load_model -> watch_start_magic_bytes transition\n", .{});
