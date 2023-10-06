@@ -2,7 +2,7 @@
 // (https://github.com/raysan5/raylib/blob/master/examples/shaders/rlights.h).
 
 const std = @import("std");
-pub const raylib = @cImport(@cInclude("raylib.h"));
+const raylib = @import("./main.zig").raylib;
 
 const MAX_LIGHTS = 4; // Max dynamic lights supported by shader
 
