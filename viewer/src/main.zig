@@ -6,26 +6,29 @@ pub const raylib = @cImport({
 const fcntl = @cImport(@cInclude("fcntl.h"));
 const rlights = @import("rlights.zig");
 
-// When started, the program watches stdin for magic bytes that are randomly generated.
+// When started, the program watches stdin for commands.
 // When finding this, then read in the number of incoming points so memory can
 // be allocated, and then read in tuples of points in x,y,z u32 format.
 // When reaching the last one go back into "watching" mode.
 
-const START_MAGIC_BYTES = [_]u8{ 0x00, 0xe3, 0x42, 0x61, 0x85, 0x96, 0x41, 0x46, 0x37, 0xc9, 0xfd, 0xa5, 0x51, 0xf9, 0x60, 0x68 };
-
-const State = enum {
-  watch_start_magic_bytes,
-  read_vertex_count,
-  read_vertices,
-  read_triangle_count,
-  read_indices,
+const Commands = enum {
+  start,
+  write_vertex_count,
+  write_vertices,
   load_model,
 };
 
-fn convert(slice: []f32) []raylib.Vector3 {
+const State = enum {
+  wait_command,
+  read_vertex_count,
+  read_vertices,
+  load_model,
+};
+
+fn u8sToVector3s(slice: []u8) []raylib.Vector3 {
   var result: []raylib.Vector3 = &[0]raylib.Vector3{};
-  result.ptr = @ptrCast(slice.ptr);
-  result.len = slice.len / 3;
+  result.ptr = @alignCast(@ptrCast(slice.ptr));
+  result.len = slice.len / 4 / 3;
   return result;
 }
 
@@ -33,28 +36,24 @@ const Mesh = struct {
   isLoaded: bool = false,
   vertexCount: i32,
   triangleCount: i32,
-  vertices: ?std.ArrayList(f32),
+  vertices: ?std.ArrayList(u8),
   normals: ?[]raylib.Vector3,
-  indices: ?std.ArrayList(u16),
   raylib: ?raylib.Mesh,
 
   fn initRaylibMesh(self: *@This(), allocator: std.mem.Allocator) !void {
-    self.normals = try computeNormals(
-      allocator,
-      convert(self.vertices.?.items),
-      self.indices.?.items
-    );
+    const vertices = u8sToVector3s(self.vertices.?.items);
+    self.normals = try computeNormals(allocator, vertices);
 
     self.raylib = .{
       .vertexCount = self.vertexCount,
-      .triangleCount = self.triangleCount,
-      .vertices = @ptrCast(self.vertices.?.items),
+      .triangleCount = @divFloor(self.vertexCount, 3),
+      .vertices = @ptrCast(vertices),
       .texcoords = null,
       .texcoords2 = null,
       .normals = @ptrCast(self.normals.?),
+      .indices = null,
       .tangents = null,
       .colors = null,
-      .indices = @ptrCast(self.indices.?.items),
       .animVertices = null,
       .animNormals = null,
       .boneIds = null,
@@ -66,7 +65,6 @@ const Mesh = struct {
 
   fn deinitRaylibMesh(self: *@This(), allocator: std.mem.Allocator) void {
     self.vertices.?.deinit();
-    self.indices.?.deinit();
     allocator.free(self.normals.?);
   }
 
@@ -179,31 +177,23 @@ pub fn main() !void {
 
   raylib.SetTargetFPS(60);
 
-  var state = State.watch_start_magic_bytes;
+  var state = State.wait_command;
 
   const XYZ_SIZE = @sizeOf(f32) * 3;
-  const ABC_SIZE = @sizeOf(u32) * 3;
-  const SOCKET_BUFFER_SIZE = 32768; // Apparently the default on Linux
+  const SOCKET_BUFFER_SIZE = 32768 * 8; // Apparently the default on Linux
   const XYZ_COORDS_SIZE_BYTES = XYZ_SIZE * (SOCKET_BUFFER_SIZE / XYZ_SIZE);
-  const ABC_INDICES_SIZE_BYTES = ABC_SIZE * (SOCKET_BUFFER_SIZE / ABC_SIZE);
 
   const RPCBuffers = struct {
-    ack: [1]u8,
-    magic_bytes: [START_MAGIC_BYTES.len]u8,
+    command_bytes: [1]u8,
     vertex_count: [@sizeOf(u32)]u8,
-    triangle_count: [@sizeOf(u32)]u8,
     // Try to saturate internal Linux sockets
     xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
-    abc_indices: [ABC_INDICES_SIZE_BYTES]u8,
   };
 
   var buffers = RPCBuffers{
-    .ack = [1]u8{0},
-    .magic_bytes = [_]u8{0} ** START_MAGIC_BYTES.len,
+    .command_bytes  = [1]u8{0},
     .vertex_count = [_]u8{0} ** @sizeOf(u32),
-    .triangle_count = [_]u8{0} ** @sizeOf(u32),
     .xyz_coords = [_]u8{0} ** XYZ_COORDS_SIZE_BYTES,
-    .abc_indices = [_]u8{0} ** ABC_INDICES_SIZE_BYTES,
   };
 
   var mesh: Mesh = .{
@@ -211,7 +201,6 @@ pub fn main() !void {
     .triangleCount = 0,
     .vertices = null,
     .normals = null,
-    .indices = null,
     .raylib = null,
   };
 
@@ -253,7 +242,7 @@ pub fn main() !void {
 
     blk: {
       switch (state) {
-        .watch_start_magic_bytes => {
+        .wait_command => {
           var accepted_addr: std.net.Address = undefined;
           var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
           const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
@@ -266,9 +255,9 @@ pub fn main() !void {
           } else {
             break :blk;
           }
-          _ = try connection_maybe.?.stream.reader().read(&buffers.magic_bytes);
-          if (std.mem.eql(u8, &buffers.magic_bytes, &START_MAGIC_BYTES) == false) continue;
-          std.debug.print("watch_start_magic_bytes -> read_vertex_count transition\n", .{});
+          _ = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
+          if (std.mem.eql(u8, &buffers.command_bytes, &.{ 1 }) == false) continue;
+          std.debug.print("wait_command -> read_vertex_count transition\n", .{});
           state = .read_vertex_count;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
@@ -277,57 +266,28 @@ pub fn main() !void {
           mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
           std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
           std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
-          mesh.vertices = std.ArrayList(f32).init(std.heap.raw_c_allocator);
+          mesh.vertices = std.ArrayList(u8).init(std.heap.raw_c_allocator);
           state = .read_vertices;
           _ = try connection_maybe.?.stream.write(&.{2});
         },
+
+        // Vertices come in triplets. raylib can only hold 16-bit amount of indices.
+        // So we avoid them.
         .read_vertices => {
           var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
-          var offset: usize = 0;
 
-          while (bytes_read > 0) : (bytes_read -= 4) {
-            // Could be an x, y or z coordinate
-            const coord = std.mem.bytesToValue(f32, @as(*[4]u8, @ptrCast(buffers.xyz_coords[offset..offset + 4])));
-            try mesh.vertices.?.append(coord);
-            offset += 4;
-          }
-
-          if ((mesh.vertices.?.items.len / 3) != mesh.vertexCount) continue;
+          try mesh.vertices.?.appendSlice(buffers.xyz_coords[0..bytes_read]);
+          if ((mesh.vertices.?.items.len / 4 / 3) != mesh.vertexCount) continue;
           
-          std.debug.print("read_vertices -> read_triangle_count transition\n", .{});
-          state = .read_triangle_count;
+          std.debug.print("read_vertices -> load_model transition\n", .{});
+          state = .load_model;
           _ = try connection_maybe.?.stream.write(&.{3});
         },
-        .read_triangle_count => {
-          _ = try connection_maybe.?.stream.reader().read(&buffers.triangle_count);
-          mesh.triangleCount = std.mem.bytesToValue(i32, &buffers.triangle_count);
-          std.debug.print("Triangle count: {}\n", .{mesh.triangleCount});
-          std.debug.print("read_triangle_count -> read_indices transition\n", .{});
-          mesh.indices = std.ArrayList(u16).init(std.heap.raw_c_allocator);
-          state = .read_indices;
-          _ = try connection_maybe.?.stream.write(&.{4});
-        },
-        .read_indices => {
-          var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.abc_indices);
-          var offset: usize = 0;
-          while (bytes_read > 0) : (bytes_read -= 4) {
-            // Could be an x, y or z coordinate
-            const index = std.mem.bytesToValue(u16, @as(*[2]u8, @ptrCast(buffers.abc_indices[offset..offset + 2])));
-            try mesh.indices.?.append(index);
-            offset += 4;
-          }
-
-          if ((mesh.indices.?.items.len / 3) != mesh.triangleCount) continue;
-          
-          std.debug.print("read_indices -> load_model transition\n", .{});
-          state = .load_model;
-          _ = try connection_maybe.?.stream.write(&.{5});
-        },
         .load_model => {
-          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.ack);
+          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
 
           // If there's no acknowledge byte, skip this until we get one.
-          if (bytes_read != 1 or buffers.ack[0] != 1) continue;
+          if (bytes_read != 1 or buffers.command_bytes[0] != 1) continue;
 
           // Unload previous model from VRAM. This unloads the model's mesh.
           if (model_maybe) |model| { raylib.UnloadModel(model); }
@@ -335,9 +295,9 @@ pub fn main() !void {
           // Create the new mesh/model from the streamed data
           model_maybe = try mesh.loadModel(std.heap.raw_c_allocator, shader);
 
-          state = .watch_start_magic_bytes;
-          std.debug.print("load_model -> watch_start_magic_bytes transition\n", .{});
-          _ = try connection_maybe.?.stream.write(&.{6});
+          state = .wait_command;
+          std.debug.print("load_model -> wait_command transition\n", .{});
+          _ = try connection_maybe.?.stream.write(&.{4});
           connection_maybe.?.stream.close();
           connection_maybe = null;
         },
@@ -346,23 +306,24 @@ pub fn main() !void {
   }
 }
 
-fn computeNormals(allocator: std.mem.Allocator,
-                  vertices: []raylib.Vector3,
-                  indices: []u16) ![]raylib.Vector3 {
+fn computeNormals(
+  allocator: std.mem.Allocator,
+  vertices: []raylib.Vector3,
+) ![]raylib.Vector3 {
   // One normal per vertex.
   var normals = try allocator.alloc(raylib.Vector3, vertices.len);
   for (0..normals.len) |i| {
     normals[i] = raylib.Vector3Zero();
   }
 
-  // For each triangle (triplet of indices)
-  for (0..indices.len / 3) |j| {
+  // For each triangle
+  for (0..vertices.len / 3) |j| {
     const v = raylib.Vector3Normalize(raylib.Vector3CrossProduct(
-      raylib.Vector3Subtract(vertices[indices[3 * j + 1]], vertices[indices[3 * j]]),
-      raylib.Vector3Subtract(vertices[indices[3 * j + 2]], vertices[indices[3 * j]])));
-    normals[indices[3 * j]] = raylib.Vector3Add(normals[indices[3 * j]], v);
-    normals[indices[3 * j + 1]] = raylib.Vector3Add(normals[indices[3 * j + 1]], v);
-    normals[indices[3 * j + 2]] = raylib.Vector3Add(normals[indices[3 * j + 2]], v);
+      raylib.Vector3Subtract(vertices[3 * j + 1], vertices[3 * j]),
+      raylib.Vector3Subtract(vertices[3 * j + 2], vertices[3 * j])));
+    normals[3 * j] = raylib.Vector3Add(normals[3 * j], v);
+    normals[3 * j + 1] = raylib.Vector3Add(normals[3 * j + 1], v);
+    normals[3 * j + 2] = raylib.Vector3Add(normals[3 * j + 2], v);
   }
 
   // This has the effect of averaging the normals.
