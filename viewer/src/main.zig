@@ -34,20 +34,24 @@ const Mesh = struct {
   vertexCount: i32,
   triangleCount: i32,
   vertices: ?std.ArrayList(f32),
-  normals: ?std.ArrayList(f32),
+  normals: ?[]raylib.Vector3,
   indices: ?std.ArrayList(u16),
   raylib: ?raylib.Mesh,
 
   fn initRaylibMesh(self: *@This(), allocator: std.mem.Allocator) !void {
+    self.normals = try computeNormals(
+      allocator,
+      convert(self.vertices.?.items),
+      self.indices.?.items
+    );
+
     self.raylib = .{
       .vertexCount = self.vertexCount,
       .triangleCount = self.triangleCount,
       .vertices = @ptrCast(self.vertices.?.items),
       .texcoords = null,
       .texcoords2 = null,
-      .normals = @ptrCast(try computeNormals(allocator,
-                                             convert(self.vertices.?.items),
-                                             self.indices.?.items)),
+      .normals = @ptrCast(self.normals.?),
       .tangents = null,
       .colors = null,
       .indices = @ptrCast(self.indices.?.items),
@@ -60,28 +64,48 @@ const Mesh = struct {
     };
   }
 
-  fn loadModel(self: *@This(),
-               allocator: std.mem.Allocator,
-               shader: raylib.Shader) !raylib.Model {
+  fn deinitRaylibMesh(self: *@This(), allocator: std.mem.Allocator) void {
+    self.vertices.?.deinit();
+    self.indices.?.deinit();
+    allocator.free(self.normals.?);
+  }
+
+  fn loadModel(
+    self: *@This(),
+    allocator: std.mem.Allocator,
+    shader: raylib.Shader
+  ) !raylib.Model {
     try self.initRaylibMesh(allocator);
     raylib.UploadMesh(&self.raylib.?, true);
     var model = raylib.LoadModelFromMesh(self.raylib.?);
+
     // Do this so that DrawMesh will send the material's data to  shader.
     model.materials[0].shader = shader;
     return model;
+  }
+
+  fn unloadModel(
+    self: *@This(),
+    //model: raylib.Model,
+  ) void {
+    raylib.UnloadMesh(self.raylib.?);
   }
 };
 
 pub const options_override = .{ .io_mode = .evented };
 
+// Ported from raylib/rcamera.h
 fn GetCameraForward(camera: raylib.Camera3D) raylib.Vector3 {
   return raylib.Vector3Normalize(
-    raylib.Vector3Subtract(camera.target, camera.position));
+    raylib.Vector3Subtract(camera.target, camera.position)
+  );
 }
 
 fn GetCameraRight(camera: raylib.Camera3D) raylib.Vector3 {
-  return raylib.Vector3CrossProduct(GetCameraForward(camera), @bitCast(camera.up));
+  return raylib.Vector3CrossProduct(GetCameraForward(camera), camera.up);
 }
+
+pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
 pub fn updateCamera(camera: *raylib.Camera3D) void {
   const key_pressed = raylib.GetKeyPressed();
@@ -106,8 +130,9 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   if (raylib.IsMouseButtonDown(raylib.MOUSE_BUTTON_LEFT)) {
     var mouse_delta = raylib.GetMouseDelta();
     const deg: f32 = (2.0 * std.math.pi)/360.0;
-    mouse_delta.x = 180*deg * (mouse_delta.x / 640.0);
-    mouse_delta.y = 180*deg * (mouse_delta.y / 480.0);
+
+    mouse_delta.x = 180*deg * (mouse_delta.x / @as(f32, @floatFromInt(raylib.GetScreenWidth())));
+    mouse_delta.y = 180*deg * (mouse_delta.y / @as(f32, @floatFromInt(raylib.GetScreenHeight())));
 
     camera.position = raylib.Vector3Transform(
       camera.position,
@@ -116,12 +141,12 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
 
     camera.position = raylib.Vector3Transform(
       camera.position,
+      // This is quite cool. Basically find the axis to the right
+      // of the camera! Look at cross product animations to understand.
       raylib.MatrixRotate(GetCameraRight(camera.*), -mouse_delta.y)
     );
   }
 }
-
-pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -315,7 +340,7 @@ pub fn main() !void {
           if (bytes_read != 1 or buffers.ack[0] != 1) continue;
 
           // Unload previous model from VRAM. This unloads the model's mesh.
-          // if (model_maybe) |model| { raylib.UnloadModel(model); }
+          if (model_maybe) |_| { mesh.unloadModel(); }
 
           // Create the new mesh/model from the streamed data
           model_maybe = try mesh.loadModel(allocator, shader);
