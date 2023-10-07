@@ -67,3 +67,23 @@ that uses a UNIX socket to read mesh data from SummonScripts. It's very small an
 will continue to be. Any other code CAD systems are free to use this as well. It
 remains quick even on complex models because it uses progressive rendering.
 
+## Thanks
+
+I would like to first thank those individuals who have created amazing technology
+that is completely free. In particular this is a shoutout to mkeeter (libfive),
+Koromix (koffi), raysan5 (raylib), the whole Zig team, the V8 team, and
+Inigo Quilez (SDFs). Without any one of these people, this project would
+probably not exist.
+
+Next I would sincerely like to thank all of the people in the code CAD space who
+have given their time to me over the years. I will most likely forget to mention
+someone, so please let me know if I've missed you.
+
+* The OpenSCAD team (special thanks to InPhase)
+* Doug Moen
+* #openscad on libera
+* replicad team
+* CadQuery team
+* my partner who's had to deal with me asking "come look!" a million times :D
+* my friends who had to suffer similarly
+* rask (code and knowledge contributions)

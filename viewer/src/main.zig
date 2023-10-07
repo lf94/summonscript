@@ -159,8 +159,10 @@ pub fn main() !void {
   };
 
   // Load basic lighting shader.
-  var shader = raylib.LoadShader("./src/shaders/lighting.vs",
-                                 "./src/shaders/lighting.fs");
+  var shader = raylib.LoadShaderFromMemory(
+    @embedFile("shaders/lighting.vs"),
+    @embedFile("shaders/lighting.fs"),
+  );
 
   // Get shader location for camera position.
   shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] = raylib.GetShaderLocation(shader, "viewPos");

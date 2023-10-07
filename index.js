@@ -6,10 +6,12 @@ const {
   libfive_tree_x, libfive_tree_y, libfive_tree_z, libfive_tree_render_mesh,
   libfive_tree_render_mesh_coords, libfive_tree_save_mesh, libfive_tree_delete,
   libfive_tree_save_slice,
-} = require("./libfive.js");
+} = require("./libfive");
 
 // Unfortunately this one is complex.
-const { text } = require("./libfive-stdlib.js");
+const { text } = require("./libfive-stdlib");
+
+const { preview } = require("./utils/preview");
 
 //
 // Our wrapper API
@@ -491,6 +493,9 @@ class LibfiveValue {
 
     return libfive_tree_print(this.value);
   }
+  toMesh(bb, res) {
+    return libfive_tree_render_mesh(this.value, Region3(bb[0], bb[1]), res );
+  }
 };
 
 const X = () => toLibfiveValue(libfive_tree_x());
@@ -518,10 +523,6 @@ const toAlignedRegion3 = (region, resolution) => {
     region[1].map((p) => alignToResolution(p, resolution, true)),
   ];
   return Region3(r_[0], r_[1]);
-};
-
-const toMesh = (result, region, resolution) => {
-  return libfive_tree_render_mesh(result.value, Region3(region[0], region[1]), resolution);
 };
 
 const toMeshCoords = ({ value }, region, resolution) => {
@@ -652,7 +653,6 @@ module.exports = {
   Region3,
   saveAsSTL,
   saveAsPNG,
-  toMesh,
   toMeshCoords,
   ellipsoid,
   sphere,
@@ -676,4 +676,5 @@ module.exports = {
   clamp,
   mix,
   sign,
+  preview,
 };

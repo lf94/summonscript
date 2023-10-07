@@ -1,4 +1,3 @@
-const { preview } = require("../utils/preview");
 const { capsule, cone, cylinder, mm, deg } = require("../index");
 
 const cap1 = capsule(10, 10).elongate([2, 0, 0]);
@@ -13,5 +12,5 @@ const result = cone1
 
 const res = 1.0;
 const region = [45+2,45+2,45+2];
-preview(result, [region.mul(-1), region], 1, 4);
 
+result.preview([region.mul(-1), region], 1, 4);

@@ -39,4 +39,4 @@ const result = base
   .union(peg.move(d.peg().xyz()), 1*mm);
 
 const region = [50,50,50];
-preview(result, [region.mul(-1),region], 0.5, 2**2);
+preview(result, [region.mul(-1),region], 1, 2**2);
