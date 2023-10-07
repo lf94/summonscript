@@ -85,6 +85,43 @@ const Mesh = struct {
 
 pub const options_override = .{ .io_mode = .evented };
 
+fn Translate(v: raylib.Vector3) raylib.Matrix {
+  return raylib.MatrixTranslate(v.x, v.y, v.z);
+}
+
+fn Rotate(axis: raylib.Vector3, angle: f32) raylib.Matrix {
+  return raylib.MatrixRotate(axis, angle);
+}
+
+fn Scale(x: f32, y: f32, z: f32) raylib.Matrix {
+  return raylib.MatrixScale(x, y, z);
+}
+
+fn Add(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
+  return raylib.Vector3Add(a, b);
+}
+
+fn Sub(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
+  return raylib.Vector3Subtract(a, b);
+}
+
+fn Mul(a: raylib.Matrix, b: raylib.Matrix) raylib.Matrix {
+  return raylib.MatrixMultiply(a, b);
+}
+
+fn Neg(v: raylib.Vector3) raylib.Vector3 {
+  return raylib.Vector3Negate(v);
+}
+
+// Compose a sequence of transforms to a single one.
+fn Compose(mats: []const raylib.Matrix) raylib.Matrix {
+  var result = raylib.MatrixIdentity();
+  for (mats) |m| {
+    result = Mul(result, m);
+  }
+  return result;
+}
+
 // Ported from raylib/rcamera.h
 fn GetCameraForward(camera: raylib.Camera3D) raylib.Vector3 {
   return raylib.Vector3Normalize(
@@ -96,47 +133,60 @@ fn GetCameraRight(camera: raylib.Camera3D) raylib.Vector3 {
   return raylib.Vector3CrossProduct(GetCameraForward(camera), camera.up);
 }
 
+fn GetCameraDown(camera: raylib.Camera3D) raylib.Vector3 {
+  return raylib.Vector3Negate(camera.up);
+}
+
+fn GetCameraLeft(camera: raylib.Camera3D) raylib.Vector3 {
+  return raylib.Vector3CrossProduct(camera.up, GetCameraForward(camera));
+}
+
 pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
 pub fn updateCamera(camera: *raylib.Camera3D) void {
   const key_pressed = raylib.GetKeyPressed();
   switch (key_pressed) {
     raylib.KEY_SPACE => camera.position = CAMERA_INITIAL_POSITION,
-    raylib.KEY_UP => camera.position = .{ .x = 0.0, .y = 0.0, .z = 25.0 },
-    raylib.KEY_DOWN => camera.position = .{ .x = 0.0, .y = 0.0, .z = -25.0 },
-    raylib.KEY_LEFT => camera.position = .{ .x = -25.0, .y = 0.0, .z = 0.0 },
-    raylib.KEY_RIGHT => camera.position = .{ .x = 25.0, .y = 0.0, .z = 0.0 },
+    raylib.KEY_ONE => camera.position = .{ .x = 0.0, .y = 0.0, .z = 25.0 },
+    raylib.KEY_TWO => camera.position = .{ .x = 0.0, .y = 0.0, .z = -25.0 },
+    raylib.KEY_THREE => camera.position = .{ .x = -25.0, .y = 0.0, .z = 0.0 },
+    raylib.KEY_FOUR => camera.position = .{ .x = 25.0, .y = 0.0, .z = 0.0 },
     else => {},
   }
 
-  const mouse_scroll = raylib.GetMouseWheelMove();
-  if (mouse_scroll != 0) {
-    const s = 1 - (mouse_scroll * 0.1); // 0.1 is just a scroll scaling factor
-    camera.position = raylib.Vector3Transform(
-      camera.position,
-      raylib.MatrixScale(s, s, s)
-    );
-  }
+  // Zoom
+  const scale = 1 - raylib.GetMouseWheelMove() * 0.1; // 0.1 is just a scroll scaling factor
 
+  // Rotation
+  var rotateX: f32 = 0;
+  var rotateY: f32 = 0;
   if (raylib.IsMouseButtonDown(raylib.MOUSE_BUTTON_LEFT)) {
     var mouse_delta = raylib.GetMouseDelta();
     const deg: f32 = (2.0 * std.math.pi)/360.0;
 
-    mouse_delta.x = 180*deg * (mouse_delta.x / @as(f32, @floatFromInt(raylib.GetScreenWidth())));
-    mouse_delta.y = 180*deg * (mouse_delta.y / @as(f32, @floatFromInt(raylib.GetScreenHeight())));
-
-    camera.position = raylib.Vector3Transform(
-      camera.position,
-      raylib.MatrixRotate(camera.up, -mouse_delta.x)
-    );
-
-    camera.position = raylib.Vector3Transform(
-      camera.position,
-      // This is quite cool. Basically find the axis to the right
-      // of the camera! Look at cross product animations to understand.
-      raylib.MatrixRotate(GetCameraRight(camera.*), -mouse_delta.y)
-    );
+    rotateX = -180*deg * (mouse_delta.x / @as(f32, @floatFromInt(raylib.GetScreenWidth())));
+    rotateY = -180*deg * (mouse_delta.y / @as(f32, @floatFromInt(raylib.GetScreenHeight())));
   }
+
+  // Translation
+  var translate = raylib.Vector3Zero();
+  if (raylib.IsKeyDown(raylib.KEY_UP)) { translate = Add(translate, camera.up) ; }
+  if (raylib.IsKeyDown(raylib.KEY_DOWN)) { translate = Add(translate, GetCameraDown(camera.*)); }
+  if (raylib.IsKeyDown(raylib.KEY_LEFT)) { translate = Add(translate, GetCameraLeft(camera.*)) ; }
+  if (raylib.IsKeyDown(raylib.KEY_RIGHT)) { translate = Add(translate, GetCameraRight(camera.*)) ; }
+  translate = raylib.Vector3Scale(translate, 3 * raylib.GetFrameTime());
+  camera.target = raylib.Vector3Add(camera.target, translate);
+
+  // Apply overall transformation.
+  camera.position = raylib.Vector3Transform(
+    camera.position,
+    Compose(&[_]raylib.Matrix{
+      Translate(Sub(translate, camera.target)),
+      Scale(scale, scale, scale),
+      Rotate(GetCameraRight(camera.*), rotateY),
+      Rotate(camera.up, rotateX),
+      Translate(camera.target),
+  }));
 }
 
 pub fn main() !void {
@@ -314,23 +364,15 @@ fn computeNormals(
 ) ![]raylib.Vector3 {
   // One normal per vertex.
   var normals = try allocator.alloc(raylib.Vector3, vertices.len);
-  for (0..normals.len) |i| {
-    normals[i] = raylib.Vector3Zero();
-  }
-
+  
   // For each triangle
   for (0..vertices.len / 3) |j| {
     const v = raylib.Vector3Normalize(raylib.Vector3CrossProduct(
       raylib.Vector3Subtract(vertices[3 * j + 1], vertices[3 * j]),
       raylib.Vector3Subtract(vertices[3 * j + 2], vertices[3 * j])));
-    normals[3 * j] = raylib.Vector3Add(normals[3 * j], v);
-    normals[3 * j + 1] = raylib.Vector3Add(normals[3 * j + 1], v);
-    normals[3 * j + 2] = raylib.Vector3Add(normals[3 * j + 2], v);
-  }
-
-  // This has the effect of averaging the normals.
-  for (0..normals.len) |i| {
-    normals[i] = raylib.Vector3Normalize(normals[i]);
+    normals[3 * j] = v;
+    normals[3 * j + 1] = v;
+    normals[3 * j + 2] = v;
   }
 
   return normals;
