@@ -84,31 +84,31 @@ const Mesh = struct {
 
 pub const options_override = .{ .io_mode = .evented };
 
-fn Translate(v: raylib.Vector3) raylib.Matrix {
+inline fn Translate(v: raylib.Vector3) raylib.Matrix {
   return raylib.MatrixTranslate(v.x, v.y, v.z);
 }
 
-fn Rotate(axis: raylib.Vector3, angle: f32) raylib.Matrix {
+inline fn Rotate(axis: raylib.Vector3, angle: f32) raylib.Matrix {
   return raylib.MatrixRotate(axis, angle);
 }
 
-fn Scale(x: f32, y: f32, z: f32) raylib.Matrix {
+inline fn Scale(x: f32, y: f32, z: f32) raylib.Matrix {
   return raylib.MatrixScale(x, y, z);
 }
 
-fn Add(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
+inline fn Add(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
   return raylib.Vector3Add(a, b);
 }
 
-fn Sub(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
+inline fn Sub(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
   return raylib.Vector3Subtract(a, b);
 }
 
-fn Mul(a: raylib.Matrix, b: raylib.Matrix) raylib.Matrix {
+inline fn Mul(a: raylib.Matrix, b: raylib.Matrix) raylib.Matrix {
   return raylib.MatrixMultiply(a, b);
 }
 
-fn Neg(v: raylib.Vector3) raylib.Vector3 {
+inline fn Neg(v: raylib.Vector3) raylib.Vector3 {
   return raylib.Vector3Negate(v);
 }
 
@@ -160,9 +160,8 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   var rotateX: f32 = 0;
   var rotateY: f32 = 0;
   if (raylib.IsMouseButtonDown(raylib.MOUSE_BUTTON_LEFT)) {
-    var mouse_delta = raylib.GetMouseDelta();
+    const mouse_delta = raylib.GetMouseDelta();
     const deg: f32 = (2.0 * std.math.pi)/360.0;
-
     rotateX = -180*deg * (mouse_delta.x / @as(f32, @floatFromInt(raylib.GetScreenWidth())));
     rotateY = -180*deg * (mouse_delta.y / @as(f32, @floatFromInt(raylib.GetScreenHeight())));
   }
@@ -181,9 +180,9 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
     camera.position,
     Compose(&[_]raylib.Matrix{
       Translate(Sub(translate, camera.target)),
-      Scale(scale, scale, scale),
       Rotate(GetCameraRight(camera.*), rotateY),
       Rotate(camera.up, rotateX),
+      Scale(scale, scale, scale),
       Translate(camera.target),
   }));
 }
