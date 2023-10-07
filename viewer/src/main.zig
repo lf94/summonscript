@@ -11,11 +11,9 @@ const rlights = @import("rlights.zig");
 // be allocated, and then read in tuples of points in x,y,z u32 format.
 // When reaching the last one go back into "watching" mode.
 
-const Commands = enum {
-  start,
-  write_vertex_count,
-  write_vertices,
-  load_model,
+const Command = enum(u8) {
+  start = 1,
+  quit,
 };
 
 const State = enum {
@@ -23,6 +21,7 @@ const State = enum {
   read_vertex_count,
   read_vertices,
   load_model,
+  shutdown,
 };
 
 fn u8sToVector3s(slice: []u8) []raylib.Vector3 {
@@ -221,7 +220,7 @@ pub fn main() !void {
   _ = fcntl.fcntl(sockfd, fcntl.F_SETFL, flags | fcntl.O_NONBLOCK);
   var connection_maybe: ?std.net.StreamServer.Connection = null;
 
-  while (!raylib.WindowShouldClose()) {
+  while (!raylib.WindowShouldClose() and state != .shutdown) {
     
     // Our custom input handling that affects the camera
     updateCamera(&camera);
@@ -257,8 +256,16 @@ pub fn main() !void {
           } else {
             break :blk;
           }
-          _ = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
-          if (std.mem.eql(u8, &buffers.command_bytes, &.{ 1 }) == false) continue;
+
+          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
+          if (bytes_read == 0) continue;
+
+          const command: Command = @enumFromInt(buffers.command_bytes[0]);
+          state = switch (command) {
+            Command.start => .read_vertex_count,
+            Command.quit => .shutdown,
+          };
+
           std.debug.print("wait_command -> read_vertex_count transition\n", .{});
           state = .read_vertex_count;
           _ = try connection_maybe.?.stream.write(&.{1});
@@ -302,6 +309,9 @@ pub fn main() !void {
           _ = try connection_maybe.?.stream.write(&.{4});
           connection_maybe.?.stream.close();
           connection_maybe = null;
+        },
+        .shutdown => {
+          std.debug.print("Shutting down\n", .{});
         },
       }
     }
