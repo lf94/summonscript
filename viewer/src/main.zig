@@ -185,6 +185,12 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
       Scale(scale, scale, scale),
       Translate(camera.target),
   }));
+
+  // Update camera up vector.
+  camera.up = raylib.Vector3Transform(
+    camera.up,
+    Rotate(GetCameraRight(camera.*), rotateY)
+  );
 }
 
 pub fn main() !void {
