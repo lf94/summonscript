@@ -18,6 +18,8 @@ const Command = enum(u8) {
 
 const State = enum {
   wait_command,
+  read_id,
+  read_iteration,
   read_vertex_count,
   read_vertices,
   load_model,
@@ -33,6 +35,8 @@ fn u8sToVector3s(slice: []u8) []raylib.Vector3 {
 
 const Mesh = struct {
   isLoaded: bool = false,
+  id: u32 = 0,
+  iteration: u32 = 0,
   vertexCount: i32,
   triangleCount: i32,
   vertices: ?std.ArrayList(u8),
@@ -241,6 +245,8 @@ pub fn main() !void {
 
   const RPCBuffers = struct {
     command_bytes: [1]u8,
+    id_byte: [1]u8,
+    iteration_byte: [1]u8,
     vertex_count: [@sizeOf(u32)]u8,
     // Try to saturate internal Linux sockets
     xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
@@ -248,6 +254,8 @@ pub fn main() !void {
 
   var buffers = RPCBuffers{
     .command_bytes  = [1]u8{0},
+    .id_byte = [1]u8{0},
+    .iteration_byte = [1]u8{0},
     .vertex_count = [_]u8{0} ** @sizeOf(u32),
     .xyz_coords = [_]u8{0} ** XYZ_COORDS_SIZE_BYTES,
   };
@@ -317,11 +325,29 @@ pub fn main() !void {
 
           const command: Command = @enumFromInt(buffers.command_bytes[0]);
           state = switch (command) {
-            Command.start => .read_vertex_count,
+            Command.start => .read_id,
             Command.quit => .shutdown,
           };
 
-          std.debug.print("wait_command -> read_vertex_count transition\n", .{});
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .read_id => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.id_byte);
+          mesh.id = buffers.id_byte[0];
+          std.debug.print("read_id -> read_iteration\n", .{});
+          state = .read_iteration;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .read_iteration => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.iteration_byte);
+          mesh.iteration = buffers.iteration_byte[0];
+          std.debug.print("Iteration: {}\n", .{ mesh.iteration });
+
+          //if (mesh.iteration == 0) {
+          //  // This is where you'd start to compare vertices.
+          //}
+          
+          std.debug.print("read_iteration -> read_vertex_count\n", .{});
           state = .read_vertex_count;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
@@ -332,7 +358,7 @@ pub fn main() !void {
           std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
           mesh.vertices = std.ArrayList(u8).init(std.heap.raw_c_allocator);
           state = .read_vertices;
-          _ = try connection_maybe.?.stream.write(&.{2});
+          _ = try connection_maybe.?.stream.write(&.{1});
         },
 
         // Vertices come in triplets. raylib can only hold 16-bit amount of indices.
@@ -345,7 +371,7 @@ pub fn main() !void {
           
           std.debug.print("read_vertices -> load_model transition\n", .{});
           state = .load_model;
-          _ = try connection_maybe.?.stream.write(&.{3});
+          _ = try connection_maybe.?.stream.write(&.{1});
         },
         .load_model => {
           const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
@@ -361,7 +387,7 @@ pub fn main() !void {
 
           state = .wait_command;
           std.debug.print("load_model -> wait_command transition\n", .{});
-          _ = try connection_maybe.?.stream.write(&.{4});
+          _ = try connection_maybe.?.stream.write(&.{1});
           connection_maybe.?.stream.close();
           connection_maybe = null;
         },
