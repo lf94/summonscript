@@ -208,14 +208,15 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
       Rotate(camera.up, rotateX),
       Scale(scale, scale, scale),
       Translate(camera.target),
-  }));
+    })
+  );
 }
 
 
-fn centerPoint(vertices: []raylib.Vector3) raylib.Vector3 {
+fn boundingBoxOfVertices(vertices: []raylib.Vector3) raylib.BoundingBox {
   const mesh: raylib.Mesh = .{
-    .vertexCount = vertices.len(),
-    .triangleCount = vertices.len() * 3,
+    .vertexCount = @intCast(vertices.len),
+    .triangleCount = @intCast(vertices.len * 3),
     .vertices = @ptrCast(vertices),
     .texcoords = null,
     .texcoords2 = null,
@@ -230,8 +231,7 @@ fn centerPoint(vertices: []raylib.Vector3) raylib.Vector3 {
     .vaoId = 0,
     .vboId = null,
   };
-  const bb = raylib.GetMeshBoundingBox(mesh);
-  return raylib.Vector3Lerp(bb.min, bb.max, 1/2);
+  return raylib.GetMeshBoundingBox(mesh);
 }
 
 fn diffVector3Slices(
@@ -367,6 +367,23 @@ pub fn main() !void {
 
   while (!raylib.WindowShouldClose() and state != .shutdown) {
     
+    // If it's the first render, focus on the changes
+    if (mesh.iteration == 0) {
+      if (mesh.vertices) |vertices| {
+        const bb = boundingBoxOfVertices(u8sToVector3s(vertices.items));
+        const center = raylib.Vector3Lerp(bb.min, bb.max, 1/2);
+        const dist = raylib.Vector3Distance(center, bb.max);
+        camera.position = raylib.Vector3Add(
+          raylib.Vector3Scale(
+            Neg(GetCameraForward(camera)),
+            dist * 1.33
+          ),
+          center
+        );
+        camera.target = center;
+      }
+    }
+
     // Our custom input handling that affects the camera
     updateCamera(&camera);
     

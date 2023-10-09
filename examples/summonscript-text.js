@@ -20,13 +20,15 @@ const res = 5;
 const bb = [res, res, res];
 const boundingBox = [bb.div(-2), bb.div(2)];
 
-// Let's do a little animation
-const fn = (t) => {
-  return preview(model(t), boundingBox, res*2, res*2)
-  .then(() => {
-    if (t >= 360) return;
-    return fn(t+2);
-  });
-};
+preview(model(0), boundingBox, res*2, res*2);
 
-fn(0);
+// Let's do a little animation
+// const fn = (t) => {
+//   return preview(model(t), boundingBox, res*2, res*2)
+//   .then(() => {
+//     if (t >= 360) return;
+//     return fn(t+2);
+//   });
+// };
+// 
+// fn(0);
