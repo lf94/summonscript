@@ -12,17 +12,21 @@ const rlights = @import("rlights.zig");
 // When reaching the last one go back into "watching" mode.
 
 const Command = enum(u8) {
-  start = 1,
+  render = 1,
+  annotate,
   quit,
 };
 
 const State = enum {
   wait_command,
-  read_id,
+  read_mesh_id,
   read_iteration,
   read_vertex_count,
   read_vertices,
   load_model,
+  read_annotation_id,
+  read_annotation_line_start_end,
+  read_annotation_text,
   shutdown,
 };
 
@@ -245,19 +249,23 @@ pub fn main() !void {
 
   const RPCBuffers = struct {
     command_bytes: [1]u8,
-    id_byte: [1]u8,
+    id_bytes: [@sizeOf(u32)]u8,
     iteration_byte: [1]u8,
     vertex_count: [@sizeOf(u32)]u8,
     // Try to saturate internal Linux sockets
     xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
+    line_start_end: [@sizeOf(f32) * 6]u8,
+    text: [1024]u8,
   };
 
   var buffers = RPCBuffers{
     .command_bytes  = [1]u8{0},
-    .id_byte = [1]u8{0},
+    .id_bytes = [_]u8{0} ** @sizeOf(u32),
     .iteration_byte = [1]u8{0},
     .vertex_count = [_]u8{0} ** @sizeOf(u32),
     .xyz_coords = [_]u8{0} ** XYZ_COORDS_SIZE_BYTES,
+    .line_start_end = [_]u8{0} ** (@sizeOf(f32) * 6),
+    .text = [_]u8{0} ** 1024,
   };
 
   var mesh: Mesh = .{
@@ -267,6 +275,21 @@ pub fn main() !void {
     .normals = null,
     .raylib = null,
   };
+
+  const Annotation = struct {
+    id: u32,
+    line: struct {
+      start: raylib.Vector3,
+      end: raylib.Vector3,
+    } = .{
+      .start = .{ .x = 0, .y = 0, .z = 0 },
+      .end = .{ .x = 0, .y = 0, .z = 0 },
+    },
+    text: []u8 = "",
+  };
+
+  var annotations = std.ArrayList(Annotation).init(std.heap.raw_c_allocator);
+  var target_annotation_index: u32 = 0;
 
   var model_maybe: ?raylib.Model = null;
 
@@ -300,6 +323,10 @@ pub fn main() !void {
     if (model_maybe) |model| {
       raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.BLUE);
     }
+
+    for (annotations.items) |annotation| {
+      raylib.DrawLine3D(annotation.line.start, annotation.line.end, raylib.BLACK);
+    }
     
     raylib.EndMode3D();
     raylib.EndDrawing();
@@ -325,17 +352,78 @@ pub fn main() !void {
 
           const command: Command = @enumFromInt(buffers.command_bytes[0]);
           state = switch (command) {
-            Command.start => .read_id,
+            Command.render => .read_mesh_id,
+            Command.annotate => .read_annotation_id,
             Command.quit => .shutdown,
           };
 
           _ = try connection_maybe.?.stream.write(&.{1});
         },
-        .read_id => {
-          _ = try connection_maybe.?.stream.reader().read(&buffers.id_byte);
-          mesh.id = buffers.id_byte[0];
+        .read_mesh_id => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.id_bytes);
+          mesh.id = std.mem.bytesToValue(u32, &buffers.id_bytes);
           std.debug.print("read_id -> read_iteration\n", .{});
           state = .read_iteration;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .read_annotation_id => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.id_bytes);
+          const id = std.mem.bytesToValue(u32, &buffers.id_bytes);
+
+          var found = false;
+          for (annotations.items, 0..) |annotation, index| {
+            if (annotation.id != id) continue;
+            target_annotation_index = @intCast(index);
+            found = true;
+            break;
+          }
+
+          if (found == false) {
+            try annotations.append(Annotation { .id = id });
+          }
+
+          // 0 means abort the sequence of events that would normally come
+          if (found) {
+            _ = try connection_maybe.?.stream.write(&.{0});
+            state = .wait_command;
+          } else {
+            _ = try connection_maybe.?.stream.write(&.{1});
+            state = .read_annotation_line_start_end;
+          }
+        },
+        .read_annotation_line_start_end => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.line_start_end);
+
+          const annotation = &annotations.items[target_annotation_index];
+
+          annotation.line = .{
+            .start = .{
+              .x = std.mem.bytesToValue(f32, buffers.line_start_end[0..4]),
+              .y = std.mem.bytesToValue(f32, buffers.line_start_end[4..8]),
+              .z = std.mem.bytesToValue(f32, buffers.line_start_end[8..12]),
+            },
+            .end = .{
+              .x = std.mem.bytesToValue(f32, buffers.line_start_end[12..16]),
+              .y = std.mem.bytesToValue(f32, buffers.line_start_end[16..20]),
+              .z = std.mem.bytesToValue(f32, buffers.line_start_end[20..24]),
+            }
+          };
+
+          std.debug.print("read_annotation_line_start_end -> read_annotation_text\n", .{});
+          state = .read_annotation_text;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .read_annotation_text => {
+          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.text);
+
+          const annotation = &annotations.items[target_annotation_index];
+
+          const text = try std.heap.c_allocator.alloc(u8, bytes_read);
+          std.mem.copy(u8, text, &buffers.text);
+          annotation.text = text;
+
+          std.debug.print("read_annotation_text -> wait_command \n", .{});
+          state = .wait_command;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_iteration => {
