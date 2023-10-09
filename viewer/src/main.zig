@@ -357,6 +357,8 @@ pub fn main() !void {
             Command.quit => .shutdown,
           };
 
+          std.debug.print("Acknowledging command\n", .{});
+
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_mesh_id => {
@@ -378,15 +380,17 @@ pub fn main() !void {
             break;
           }
 
-          if (found == false) {
-            try annotations.append(Annotation { .id = id });
-          }
-
           // 0 means abort the sequence of events that would normally come
           if (found) {
             _ = try connection_maybe.?.stream.write(&.{0});
             state = .wait_command;
           } else {
+            std.debug.print("Appending new annotation {}\n", .{ id });
+            try annotations.append(Annotation { .id = id });
+
+            target_annotation_index = @intCast(annotations.items.len - 1);
+            std.debug.print("index {}\n", .{ target_annotation_index });
+
             _ = try connection_maybe.?.stream.write(&.{1});
             state = .read_annotation_line_start_end;
           }
@@ -419,12 +423,14 @@ pub fn main() !void {
           const annotation = &annotations.items[target_annotation_index];
 
           const text = try std.heap.c_allocator.alloc(u8, bytes_read);
-          std.mem.copy(u8, text, &buffers.text);
+          std.mem.copy(u8, text, buffers.text[0..bytes_read]);
           annotation.text = text;
 
           std.debug.print("read_annotation_text -> wait_command \n", .{});
           state = .wait_command;
           _ = try connection_maybe.?.stream.write(&.{1});
+          connection_maybe.?.stream.close();
+          connection_maybe = null;
         },
         .read_iteration => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.iteration_byte);

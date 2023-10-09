@@ -1,11 +1,8 @@
-cosnt { annotate } = require("../utils/annotate");
+const { annotate } = require("../utils/annotate");
 const { print2d, sphere, box, preview } = require("../index");
 
 const model = (t) => () => {
   const wave = Math.sin(t/360 * 2*Math.PI);
-
-  annotate(1, [[0,0,0],[1,2,6]], "10cm");
-  annotate(2, [[0,0,0],[1,2,6]], "2cm");
 
   const text = print2d("Summon\nScript")
   .extrudeZ(0, 0.5 * wave)
