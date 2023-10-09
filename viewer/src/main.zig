@@ -268,6 +268,13 @@ pub fn main() !void {
     .text = [_]u8{0} ** 1024,
   };
 
+  fn Delta(comptime T: type) type {
+    return struct {
+      last: T,
+      current: T,
+    };
+  }
+
   var mesh: Mesh = .{
     .vertexCount = 0,
     .triangleCount = 0,
@@ -275,6 +282,11 @@ pub fn main() !void {
     .normals = null,
     .raylib = null,
   };
+
+  // The vertices that we track between first iteration renders. We use these
+  // vertices to figure out what part of the model to focus on. In other words,
+  // we focus on the part of the model that is changing.
+  var vertices_delta_first_render: ?[]raylib.Vector3 = null;
 
   const Annotation = struct {
     id: u32,

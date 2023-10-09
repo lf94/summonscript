@@ -1,6 +1,6 @@
-const { annotate } = require("../utils/annotate");
 const { print2d, sphere, box, preview } = require("../index");
 
+// Due to multithreading of libfive, we must do things like this.
 const model = (t) => () => {
   const wave = Math.sin(t/360 * 2*Math.PI);
 
