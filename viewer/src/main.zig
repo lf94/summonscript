@@ -150,6 +150,15 @@ fn GetCameraLeft(camera: raylib.Camera3D) raylib.Vector3 {
 
 pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
+fn slideCamera(camera: *raylib.Camera3D, slide: raylib.Vector3) void {
+  camera.target = Add(camera.target, slide);
+  camera.position = Add(camera.position, slide);
+}
+
+fn setCameraTarget(camera: *raylib.Camera3D, target: raylib.Vector3) void {
+  slideCamera(camera, Sub(target, camera.target));
+}
+
 pub fn updateCamera(camera: *raylib.Camera3D) void {
   const key_pressed = raylib.GetKeyPressed();
   switch (key_pressed) {
@@ -182,23 +191,68 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   if (raylib.IsKeyDown(raylib.KEY_RIGHT)) { translate = Add(translate, GetCameraRight(camera.*)) ; }
   translate = raylib.Vector3Scale(translate, 3 * raylib.GetFrameTime());
   camera.target = raylib.Vector3Add(camera.target, translate);
-
-  // Apply overall transformation.
-  camera.position = raylib.Vector3Transform(
-    camera.position,
-    Compose(&[_]raylib.Matrix{
-      Translate(Sub(translate, camera.target)),
-      Rotate(GetCameraRight(camera.*), rotateY),
-      Rotate(camera.up, rotateX),
-      Scale(scale, scale, scale),
-      Translate(camera.target),
-  }));
+  slideCamera(camera, translate);
 
   // Update camera up vector.
   camera.up = raylib.Vector3Transform(
     camera.up,
     Rotate(GetCameraRight(camera.*), rotateY)
   );
+
+  // Apply overall transformation.
+  camera.position = raylib.Vector3Transform(
+    camera.position,
+    Compose(&[_]raylib.Matrix{
+      Translate(Neg(camera.target)),
+      Rotate(GetCameraRight(camera.*), rotateY),
+      Rotate(camera.up, rotateX),
+      Scale(scale, scale, scale),
+      Translate(camera.target),
+  }));
+}
+
+
+fn centerPoint(vertices: []raylib.Vector3) raylib.Vector3 {
+  const mesh: raylib.Mesh = .{
+    .vertexCount = vertices.len(),
+    .triangleCount = vertices.len() * 3,
+    .vertices = @ptrCast(vertices),
+    .texcoords = null,
+    .texcoords2 = null,
+    .normals = null,
+    .indices = null,
+    .tangents = null,
+    .colors = null,
+    .animVertices = null,
+    .animNormals = null,
+    .boneIds = null,
+    .boneWeights = null,
+    .vaoId = 0,
+    .vboId = null,
+  };
+  const bb = raylib.GetMeshBoundingBox(mesh);
+  return raylib.Vector3Lerp(bb.min, bb.max, 1/2);
+}
+
+fn diffVector3Slices(
+  allocator: std.mem.Allocator,
+  old: []raylib.Vector3,
+  new: []raylib.Vector3,
+) ![]raylib.Vector3 {
+  var result = std.ArrayList(raylib.Vector3).init(allocator);
+  for (0..new.len) |i| {
+    var found = false;
+    blk: for (0..old.len) |j| {
+      if (raylib.Vector3Equals(old[j], new[i]) == 1) {
+        found = true;
+        break :blk;
+      }
+    }
+    if (!found) {
+      try result.append(new[i]);
+    }
+  }
+  return result.items;
 }
 
 pub fn main() !void {
@@ -267,13 +321,6 @@ pub fn main() !void {
     .line_start_end = [_]u8{0} ** (@sizeOf(f32) * 6),
     .text = [_]u8{0} ** 1024,
   };
-
-  fn Delta(comptime T: type) type {
-    return struct {
-      last: T,
-      current: T,
-    };
-  }
 
   var mesh: Mesh = .{
     .vertexCount = 0,
@@ -380,6 +427,64 @@ pub fn main() !void {
           state = .read_iteration;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
+        .read_iteration => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.iteration_byte);
+          mesh.iteration = buffers.iteration_byte[0];
+          std.debug.print("Iteration: {}\n", .{ mesh.iteration });
+
+          std.debug.print("read_iteration -> read_vertex_count\n", .{});
+          state = .read_vertex_count;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .read_vertex_count => {
+          _ = try connection_maybe.?.stream.reader().read(&buffers.vertex_count);
+          mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
+          std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
+          std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
+          mesh.vertices = std.ArrayList(u8).init(std.heap.raw_c_allocator);
+          state = .read_vertices;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+
+        // Vertices come in triplets. raylib can only hold 16-bit amount of indices.
+        // So we avoid them.
+        .read_vertices => {
+          var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
+
+          try mesh.vertices.?.appendSlice(buffers.xyz_coords[0..bytes_read]);
+          if ((mesh.vertices.?.items.len / 4 / 3) != mesh.vertexCount) continue;
+          
+          std.debug.print("read_vertices -> load_model transition\n", .{});
+          state = .load_model;
+          _ = try connection_maybe.?.stream.write(&.{1});
+        },
+        .load_model => {
+          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
+
+          // If there's no acknowledge byte, skip this until we get one.
+          if (bytes_read != 1 or buffers.command_bytes[0] != 1) continue;
+
+          // Unload previous model from VRAM. This unloads the model's mesh.
+          if (model_maybe) |model| { raylib.UnloadModel(model); }
+
+          // Create the new mesh/model from the streamed data
+          model_maybe = try mesh.loadModel(std.heap.raw_c_allocator, shader);
+
+          // If we're on the first iteration, figure out and focus on changes
+          if (mesh.iteration == 0) {
+            if (vertices_delta_first_render) |vertices| {
+              vertices_delta_first_render = try diffVector3Slices(std.heap.c_allocator, vertices, u8sToVector3s(mesh.vertices.?.items));
+            } else {
+              vertices_delta_first_render = u8sToVector3s(mesh.vertices.?.items);
+            }
+          }
+
+          state = .wait_command;
+          std.debug.print("load_model -> wait_command transition\n", .{});
+          _ = try connection_maybe.?.stream.write(&.{1});
+          connection_maybe.?.stream.close();
+          connection_maybe = null;
+        },
         .read_annotation_id => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.id_bytes);
           const id = std.mem.bytesToValue(u32, &buffers.id_bytes);
@@ -440,59 +545,6 @@ pub fn main() !void {
 
           std.debug.print("read_annotation_text -> wait_command \n", .{});
           state = .wait_command;
-          _ = try connection_maybe.?.stream.write(&.{1});
-          connection_maybe.?.stream.close();
-          connection_maybe = null;
-        },
-        .read_iteration => {
-          _ = try connection_maybe.?.stream.reader().read(&buffers.iteration_byte);
-          mesh.iteration = buffers.iteration_byte[0];
-          std.debug.print("Iteration: {}\n", .{ mesh.iteration });
-
-          //if (mesh.iteration == 0) {
-          //  // This is where you'd start to compare vertices.
-          //}
-          
-          std.debug.print("read_iteration -> read_vertex_count\n", .{});
-          state = .read_vertex_count;
-          _ = try connection_maybe.?.stream.write(&.{1});
-        },
-        .read_vertex_count => {
-          _ = try connection_maybe.?.stream.reader().read(&buffers.vertex_count);
-          mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
-          std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
-          std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
-          mesh.vertices = std.ArrayList(u8).init(std.heap.raw_c_allocator);
-          state = .read_vertices;
-          _ = try connection_maybe.?.stream.write(&.{1});
-        },
-
-        // Vertices come in triplets. raylib can only hold 16-bit amount of indices.
-        // So we avoid them.
-        .read_vertices => {
-          var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
-
-          try mesh.vertices.?.appendSlice(buffers.xyz_coords[0..bytes_read]);
-          if ((mesh.vertices.?.items.len / 4 / 3) != mesh.vertexCount) continue;
-          
-          std.debug.print("read_vertices -> load_model transition\n", .{});
-          state = .load_model;
-          _ = try connection_maybe.?.stream.write(&.{1});
-        },
-        .load_model => {
-          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
-
-          // If there's no acknowledge byte, skip this until we get one.
-          if (bytes_read != 1 or buffers.command_bytes[0] != 1) continue;
-
-          // Unload previous model from VRAM. This unloads the model's mesh.
-          if (model_maybe) |model| { raylib.UnloadModel(model); }
-
-          // Create the new mesh/model from the streamed data
-          model_maybe = try mesh.loadModel(std.heap.raw_c_allocator, shader);
-
-          state = .wait_command;
-          std.debug.print("load_model -> wait_command transition\n", .{});
           _ = try connection_maybe.?.stream.write(&.{1});
           connection_maybe.?.stream.close();
           connection_maybe = null;
