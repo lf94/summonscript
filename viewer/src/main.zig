@@ -150,6 +150,15 @@ fn GetCameraLeft(camera: raylib.Camera3D) raylib.Vector3 {
 
 pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
+fn slideCamera(camera: *raylib.Camera3D, slide: raylib.Vector3) void {
+  camera.target = Add(camera.target, slide);
+  camera.position = Add(camera.position, slide);
+}
+
+fn setCameraTarget(camera: *raylib.Camera3D, target: raylib.Vector3) void {
+  slideCamera(camera, Sub(target, camera.target));
+}
+
 pub fn updateCamera(camera: *raylib.Camera3D) void {
   const key_pressed = raylib.GetKeyPressed();
   switch (key_pressed) {
@@ -181,24 +190,24 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   if (raylib.IsKeyDown(raylib.KEY_LEFT)) { translate = Add(translate, GetCameraLeft(camera.*)) ; }
   if (raylib.IsKeyDown(raylib.KEY_RIGHT)) { translate = Add(translate, GetCameraRight(camera.*)) ; }
   translate = raylib.Vector3Scale(translate, 3 * raylib.GetFrameTime());
-  camera.target = raylib.Vector3Add(camera.target, translate);
-
-  // Apply overall transformation.
-  camera.position = raylib.Vector3Transform(
-    camera.position,
-    Compose(&[_]raylib.Matrix{
-      Translate(Sub(translate, camera.target)),
-      Rotate(GetCameraRight(camera.*), rotateY),
-      Rotate(camera.up, rotateX),
-      Scale(scale, scale, scale),
-      Translate(camera.target),
-  }));
+  slideCamera(camera, translate);
 
   // Update camera up vector.
   camera.up = raylib.Vector3Transform(
     camera.up,
     Rotate(GetCameraRight(camera.*), rotateY)
   );
+  
+  // Apply overall transformation.
+  camera.position = raylib.Vector3Transform(
+    camera.position,
+    Compose(&[_]raylib.Matrix{
+      Translate(Neg(camera.target)),
+      Rotate(GetCameraRight(camera.*), rotateY),
+      Rotate(camera.up, rotateX),
+      Scale(scale, scale, scale),
+      Translate(camera.target),
+  }));
 }
 
 pub fn main() !void {
@@ -511,4 +520,40 @@ fn computeNormals(
   }
 
   return normals;
+}
+
+fn centerPoint(vertices: []raylib.Vector3) raylib.Vector3 {
+  const mesh: raylib.Mesh = .{
+    .vertexCount = vertices.len(),
+    .triangleCount = vertices.len() * 3,
+    .vertices = @ptrCast(vertices),
+    .texcoords = null,
+    .texcoords2 = null,
+    .normals = null,
+    .indices = null,
+    .tangents = null,
+    .colors = null,
+    .animVertices = null,
+    .animNormals = null,
+    .boneIds = null,
+    .boneWeights = null,
+    .vaoId = 0,
+    .vboId = null,
+  };
+  const bb = raylib.GetMeshBoundingBox(mesh);
+  return raylib.Vector3Lerp(bb.min, bb.max, 1/2);
+}
+
+fn diff(
+  allocator: std.mem.Allocator,
+  xs: []raylib.Vector3,
+  ys: []raylib.Vector3,
+) !std.ArrayList(raylib.Vector3) {
+  var result = std.ArrayList(raylib.Vector3).init(allocator);
+  for (0..xs.len) |i| {
+    if (raylib.Vector3Equals(xs[i], ys[i]) != 0) {
+      try result.append(ys[i]);
+    }
+  }
+  return result;
 }
