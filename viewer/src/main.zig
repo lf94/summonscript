@@ -178,13 +178,53 @@ fn GetCameraLeft(camera: raylib.Camera3D) raylib.Vector3 {
   return raylib.Vector3CrossProduct(camera.up, GetCameraForward(camera));
 }
 
+// Move camera and its target simultaneously in a specified direction.
 fn slideCamera(camera: *raylib.Camera3D, slide: raylib.Vector3) void {
   camera.target = Add(camera.target, slide);
   camera.position = Add(camera.position, slide);
 }
 
+// Slide camera to focus on specified target.
 fn setCameraTarget(camera: *raylib.Camera3D, target: raylib.Vector3) void {
   slideCamera(camera, Sub(target, camera.target));
+}
+
+// Zoom camera in/out from its target.
+fn cameraZoom(camera: *raylib.Camera3D, zoom: f32) void {
+  camera.position = raylib.Vector3Transform(
+    camera.position,
+    Compose(&[_]raylib.Matrix{
+      Translate(Neg(camera.target)),
+      Scale(zoom, zoom, zoom),
+      Translate(camera.target),
+    })
+  );
+}
+
+// Rotate camera around its target.
+fn cameraRotate(camera: *raylib.Camera3D, axis: raylib.Vector3, angle: f32) void {
+  camera.position = raylib.Vector3Transform(
+    camera.position,
+    Compose(&[_]raylib.Matrix{
+      Translate(Neg(camera.target)),
+      Rotate(axis, angle),
+      Translate(camera.target),
+    })
+  );
+}
+
+fn scaleCamera(camera: *raylib.Camera3D, scale: f32) void {
+  camera.position = raylib.Vector3Transform(
+    camera.position,
+    Compose(&[_]raylib.Matrix{
+      Translate(Neg(camera.target)),
+      Scale(scale, scale, scale),
+      Translate(camera.target),
+  }));
+}
+
+fn setCameraDistance(camera: *raylib.Camera3D, distance: f32) void {
+  scaleCamera(camera, distance / raylib.Vector3Length(camera.position));
 }
 
 pub fn updateCamera(camera: *raylib.Camera3D) void {
@@ -261,25 +301,16 @@ fn boundingBoxOfVertices(vertices: []raylib.Vector3) raylib.BoundingBox {
   return raylib.GetMeshBoundingBox(mesh);
 }
 
-fn diffVector3Slices(
-  allocator: std.mem.Allocator,
-  old: []raylib.Vector3,
-  new: []raylib.Vector3,
-) ![]raylib.Vector3 {
-  var result = std.ArrayList(raylib.Vector3).init(allocator);
-  for (0..new.len) |i| {
-    var found = false;
-    out: for (0..old.len) |j| {
-      if (raylib.Vector3Equals(old[j], new[i]) == 1) {
-        found = true;
-        break :out;
-      }
-    }
-    if (!found) {
-      try result.append(new[i]);
-    }
-  }
-  return result.items;
+inline fn Vector3Min(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
+  return .{ .x = @min(a.x, b.x), .y = @min(a.y, b.y), .z = @min(a.z, b.z) };
+}
+
+inline fn Vector3Max(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
+  return .{ .x = @max(a.x, b.x), .y = @max(a.y, b.y), .z = @max(a.z, b.z) };
+}
+
+fn boundingBoxUnion(a: raylib.BoundingBox, b: raylib.BoundingBox) raylib.BoundingBox {
+  return .{ .min = Vector3Min(a.min, b.min), .max = Vector3Max(a.max, b.max) };
 }
 
 // Those lines and text you see on blueprints showing the length or radius
@@ -399,7 +430,13 @@ pub fn main() !void {
   // The vertices that we track between first iteration renders. We use these
   // vertices to figure out what part of the model to focus on. In other words,
   // we focus on the part of the model that is changing.
-  var vertices_delta_first_render: ?[]raylib.Vector3 = null;
+  var vertices_delta_first_render_insertions: ?[]raylib.Vector3 = null;
+  var vertices_delta_first_render_deletions: ?[]raylib.Vector3 = null;
+  
+  // Old vertex data to diff new data with. Initialize to empty
+  // set. Replace with new data after diffing.
+  var old_tris = try mkSet(Tri, TriContext, std.heap.raw_c_allocator, &[_]Tri{});
+  
   var focused = false;
 
   var annotations = std.ArrayList(Annotation).init(std.heap.raw_c_allocator);
@@ -429,10 +466,16 @@ pub fn main() !void {
     // If it's the first render, focus on the changes
     out: {
       if (mesh.iteration != 0 or focused == true) break :out;
-      if (vertices_delta_first_render) |vertices| {
-        if (vertices.len < 3) break :out; // Nothing to really focus on.
+      if (vertices_delta_first_render_insertions) |vertices| {
+        if (vertices.len < 3) break :out; // Nothing to really center on.
 
-        const bb = boundingBoxOfVertices(vertices);
+        std.debug.print("\n{any}\n", .{vertices_delta_first_render_deletions});
+
+        var bb = boundingBoxOfVertices(vertices);
+        if (vertices_delta_first_render_deletions.?.len > 3) {
+          bb = boundingBoxUnion(
+            bb, boundingBoxOfVertices(vertices_delta_first_render_deletions.?));
+        }
         const center = raylib.Vector3Lerp(bb.min, bb.max, 0.5);
         const dist = raylib.Vector3Distance(center, bb.max);
         camera.position = raylib.Vector3Add(
@@ -559,22 +602,14 @@ pub fn main() !void {
           // If we're on the first iteration, calculate and focus on changes
           if (mesh.iteration == 0) {
             focused = false;
-            if (vertices_delta_first_render) |vertices| {
-              const different_vertices = try diffVector3Slices(
-                std.heap.c_allocator,
-                vertices,
-                u8sToVector3s(mesh.vertices.?.items)
-              );
-
-              if (different_vertices.len > 0) {
-                vertices_delta_first_render = different_vertices;
-              }
-
-            // This will only occur on the absolutely first render, like when
-            // the program starts.
-            } else {
-              vertices_delta_first_render = u8sToVector3s(mesh.vertices.?.items);
-            }
+            const vertices = u8sToVector3s(mesh.vertices.?.items);
+            const new_tris = try mkSet(Tri, TriContext, std.heap.raw_c_allocator,
+                                       Vector3sToTris(vertices));
+            const dif = try diff(Tri, TriContext, std.heap.raw_c_allocator, old_tris, new_tris);
+            vertices_delta_first_render_insertions = TrisToVector3s(dif.insertions);
+            vertices_delta_first_render_deletions = TrisToVector3s(dif.deletions);
+            old_tris.deinit();
+            old_tris = new_tris;
           }
 
           state = .wait_command;
@@ -657,3 +692,111 @@ pub fn main() !void {
   }
 }
 
+const Tri = struct {
+  a: raylib.Vector3,
+  b: raylib.Vector3,
+  c: raylib.Vector3,
+
+  // Equivalence up to rotations (e.g., triangles
+  // <a b c>, <c a b>, and <b c a> are equivalent).
+  // fn equals(self: *const @This(), other: Tri) bool {
+  //   return (raylib.Vector3Equals(self.a, other.a)
+  //             + raylib.Vector3Equals(self.b, other.b)
+  //             + raylib.Vector3Equals(self.c, other.c) == 3)
+  //     or (raylib.Vector3Equals(self.a, other.c)
+  //           + raylib.Vector3Equals(self.b, other.a)
+  //           + raylib.Vector3Equals(self.c, other.b) == 3)
+  //     or (raylib.Vector3Equals(self.a, other.b)
+  //           + raylib.Vector3Equals(self.b, other.c)
+  //           + raylib.Vector3Equals(self.c, other.a) == 3);
+  // }
+  
+  // Using this because it might be the case that equality should
+  // respect hashing (equal elements should hash to the same value)
+  // for hashmaps to work correctly.
+  fn equals(self: *const @This(), other: Tri) bool {
+    return raylib.Vector3Equals(self.a, other.a)
+      + raylib.Vector3Equals(self.b, other.b)
+      + raylib.Vector3Equals(self.c, other.c) == 3;
+  }
+};
+
+fn Vector3sToTris(slice: []raylib.Vector3) []Tri {
+  var result: []Tri = undefined;
+  result.ptr = @alignCast(@ptrCast(slice.ptr));
+  result.len = slice.len / 3;
+  return result;
+}
+
+fn TrisToVector3s(slice: []Tri) []raylib.Vector3 {
+  var result: []raylib.Vector3 = undefined;
+  result.ptr = @alignCast(@ptrCast(slice.ptr));
+  result.len = slice.len * 3;
+  return result;
+}
+
+// View Tri as slice of bytes.
+fn TriTou8s(tri: *const Tri) []const u8 {
+  var result: []const u8 = undefined;
+  result.ptr = @ptrCast(tri);
+  result.len = 3 * 4;
+  return result;
+}
+
+// Hash and equality functions for Tris.
+pub const TriContext = struct {
+  pub fn hash(self: @This(), s: Tri) u64 {
+    _ = self;
+    return std.hash.Wyhash.hash(0, TriTou8s(&s));
+  }
+  pub fn eql(self: @This(), a: Tri, b: Tri) bool {
+    _ = self;
+    return a.equals(b);
+  }
+};
+
+// Sets of elements of type T are encoded by hashmaps with key type T
+// and value type void.
+fn Set(comptime T: type, comptime Ctx: type) type {
+  return std.HashMap(T, void, Ctx, 80);
+}
+
+// // Sets of Tris.
+// const TriSet = Set(Tri, TriContext);
+
+// Gather triangles that are in slice 'a' and not in set 'b'. Caller
+// owns result.
+fn setMinus(comptime T: type, comptime Ctx: type,
+            allocator: std.mem.Allocator, a: Set(T, Ctx), b: Set(T, Ctx)) ![]Tri {
+  var result = std.ArrayList(Tri).init(allocator);
+  var it = a.keyIterator();
+  var x_option = it.next();
+  while (x_option) |x| {
+    if (!b.contains(x.*)) {
+      try result.append(x.*);
+    }
+    x_option = it.next();
+  }
+  return result.items;
+}
+
+// Build set from slice. Caller owns result.
+fn mkSet(comptime T: type, comptime Ctx: type,
+         allocator: std.mem.Allocator, tris: []Tri) !Set(T, Ctx) {
+  var m = Set(T, Ctx).init(allocator);
+  for (tris) |tri| {
+    try m.put(tri, {});
+  }
+  return m;
+}
+
+const Diff = struct {
+  deletions: []Tri,
+  insertions: []Tri
+};
+
+fn diff(comptime T: type, comptime Ctx: type,
+         allocator: std.mem.Allocator, old: Set(T, Ctx), new: Set(T, Ctx)) !Diff {
+  return Diff{.deletions = try setMinus(T, Ctx, allocator, old, new),
+              .insertions = try setMinus(T, Ctx, allocator, new, old)};
+}
