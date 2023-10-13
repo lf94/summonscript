@@ -12,7 +12,8 @@ const rlights = @import("rlights.zig");
 // When reaching the last one go back into "watching" mode.
 
 const Command = enum(u8) {
-  render = 1,
+  unknown = 0, // Just to make it clear, even though enums start at 0.
+  render,
   annotate,
   quit,
 };
@@ -49,7 +50,7 @@ const Mesh = struct {
 
   fn initRaylibMesh(self: *@This(), allocator: std.mem.Allocator) !void {
     const vertices = u8sToVector3s(self.vertices.?.items);
-    self.normals = try computeNormals(allocator, vertices);
+    self.normals = try Mesh.computeNormals(allocator, vertices);
 
     self.raylib = .{
       .vertexCount = self.vertexCount,
@@ -88,9 +89,38 @@ const Mesh = struct {
     model.materials[0].shader = shader;
     return model;
   }
+
+  // rask was the genius behind this too.
+  fn computeNormals(
+    allocator: std.mem.Allocator,
+    vertices: []raylib.Vector3,
+  ) ![]raylib.Vector3 {
+    // One normal per vertex.
+    var normals = try allocator.alloc(raylib.Vector3, vertices.len);
+    
+    // For each triangle
+    for (0..vertices.len / 3) |j| {
+      const v = raylib.Vector3Normalize(raylib.Vector3CrossProduct(
+        raylib.Vector3Subtract(vertices[3 * j + 1], vertices[3 * j]),
+        raylib.Vector3Subtract(vertices[3 * j + 2], vertices[3 * j])));
+      normals[3 * j] = v;
+      normals[3 * j + 1] = v;
+      normals[3 * j + 2] = v;
+    }
+
+    return normals;
+  }
 };
 
-pub const options_override = .{ .io_mode = .evented };
+//
+// A lot of camera code helpers below.
+// Thank you to rask for figuring out camera stuff :D.
+//
+
+// This position is based on the fact most 3D printers have a 10cmx10cm bed.
+// So we want to be a little out from there.
+// Due to auto-focusing the initial position doesn't matter much at all.
+pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
 inline fn Translate(v: raylib.Vector3) raylib.Matrix {
   return raylib.MatrixTranslate(v.x, v.y, v.z);
@@ -147,8 +177,6 @@ fn GetCameraDown(camera: raylib.Camera3D) raylib.Vector3 {
 fn GetCameraLeft(camera: raylib.Camera3D) raylib.Vector3 {
   return raylib.Vector3CrossProduct(camera.up, GetCameraForward(camera));
 }
-
-pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
 
 fn slideCamera(camera: *raylib.Camera3D, slide: raylib.Vector3) void {
   camera.target = Add(camera.target, slide);
@@ -212,7 +240,6 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   );
 }
 
-
 fn boundingBoxOfVertices(vertices: []raylib.Vector3) raylib.BoundingBox {
   const mesh: raylib.Mesh = .{
     .vertexCount = @intCast(vertices.len),
@@ -242,10 +269,10 @@ fn diffVector3Slices(
   var result = std.ArrayList(raylib.Vector3).init(allocator);
   for (0..new.len) |i| {
     var found = false;
-    blk: for (0..old.len) |j| {
+    out: for (0..old.len) |j| {
       if (raylib.Vector3Equals(old[j], new[i]) == 1) {
         found = true;
-        break :blk;
+        break :out;
       }
     }
     if (!found) {
@@ -255,11 +282,42 @@ fn diffVector3Slices(
   return result.items;
 }
 
+// Those lines and text you see on blueprints showing the length or radius
+// of an edge. For now we just support length annotations.
+const Annotation = struct {
+  id: u32,
+  line: struct {
+    start: raylib.Vector3,
+    end: raylib.Vector3,
+  } = .{
+    .start = .{ .x = 0, .y = 0, .z = 0 },
+    .end = .{ .x = 0, .y = 0, .z = 0 },
+  },
+  text: []u8 = "",
+};
+
+const XYZ_SIZE = @sizeOf(f32) * 3;
+// We try to saturate the socket using a large size. On Linux apparently
+// 32768 is the largest size but looking around further it seems it can be
+// much higher. The higher it is the faster large models are transfered.
+const SOCKET_BUFFER_SIZE = 32768 * 8;
+const XYZ_COORDS_SIZE_BYTES = XYZ_SIZE * (SOCKET_BUFFER_SIZE / XYZ_SIZE);
+
+// We could probably use a single large buffer, but it's easier to reason
+// about memory usage this way.
+const RPCBuffers = struct {
+  command_bytes: [1]u8,
+  id_bytes: [@sizeOf(u32)]u8,
+  iteration_byte: [1]u8,
+  vertex_count: [@sizeOf(u32)]u8,
+  // Try to saturate internal Linux sockets
+  xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
+  line_start_end: [@sizeOf(f32) * 6]u8,
+  text: [1024]u8,
+};
+
 pub fn main() !void {
-  const screen = .{
-    .width = 640,
-    .height = 480,
-  };
+  const screen = .{ .width = 640, .height = 480, };
 
   raylib.SetConfigFlags(raylib.FLAG_MSAA_4X_HINT);
   raylib.InitWindow(screen.width, screen.height, "libfive_mesh viewer");
@@ -267,50 +325,43 @@ pub fn main() !void {
 
   // Define the camera to look into our 3d world
   var camera = raylib.Camera3D {
-    .position = CAMERA_INITIAL_POSITION, // Camera position
-    .target   = .{ .x = 0.0, .y =   0.0, .z = 0.0 }, // Camera looking at point
-    .up       = .{ .x = 0.0, .y =   0.0, .z = 1.0 }, // Camera up vector (rotation towards target)
-    .fovy = 45.0, // Camera field-of-view Y
-    .projection = raylib.CAMERA_PERSPECTIVE, // Camera mode type
+    .position   = CAMERA_INITIAL_POSITION,           // Camera position
+    .target     = .{ .x = 0.0, .y = 0.0, .z = 0.0 }, // Camera looking at point
+    .up         = .{ .x = 0.0, .y = 0.0, .z = 1.0 }, // Camera up vector (rotation towards target)
+    .fovy       = 45.0,                              // Camera field-of-view Y
+    .projection = raylib.CAMERA_PERSPECTIVE,         // Camera mode type
   };
 
-  // Load basic lighting shader.
   var shader = raylib.LoadShaderFromMemory(
     @embedFile("shaders/lighting.vs"),
     @embedFile("shaders/lighting.fs"),
   );
 
-  // Get shader location for camera position.
-  shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] = raylib.GetShaderLocation(shader, "viewPos");
+  // "Location" is essentially a "pointer reference".
+  // Allows for communication between our program and the shader.
+  shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] =
+    raylib.GetShaderLocation(shader, "viewPos");
 
-  // Ambient light level.
-  var ambientLoc = raylib.GetShaderLocation(shader, "ambient");
-  var v: raylib.Vector4 = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
-  raylib.SetShaderValue(shader, ambientLoc, &v,
-                        raylib.SHADER_UNIFORM_VEC4);
+  // equiv. to RGBA
+  var ambient_value = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
 
-  // Create point light source.
-  _ = rlights.CreateLight(rlights.LightType.point, .{ .x = 10, .y = -25.0, .z = 100.0 },
-                        @bitCast(raylib.Vector3Zero()), raylib.WHITE, shader).?;
+  var ambient_loc = raylib.GetShaderLocation(shader, "ambient");
+  raylib.SetShaderValue(shader, ambient_loc, &ambient_value, raylib.SHADER_UNIFORM_VEC4);
 
+  // Assigning the return value would be used for say, rendering a sphere that
+  // represents the source of light. We just care about showing a light though.
+  _ = rlights.CreateLight(
+    rlights.LightType.point,
+    .{ .x = 10, .y = -25.0, .z = 100.0 }, // an arbitrary point way up in the sky.
+    raylib.Vector3Zero(),
+    raylib.WHITE, shader
+  ).?;
+
+  // 60 is arbitrary. To be honest this could probably be even lower to save
+  // on GPU computation.
   raylib.SetTargetFPS(60);
 
   var state = State.wait_command;
-
-  const XYZ_SIZE = @sizeOf(f32) * 3;
-  const SOCKET_BUFFER_SIZE = 32768 * 8; // Apparently the default on Linux
-  const XYZ_COORDS_SIZE_BYTES = XYZ_SIZE * (SOCKET_BUFFER_SIZE / XYZ_SIZE);
-
-  const RPCBuffers = struct {
-    command_bytes: [1]u8,
-    id_bytes: [@sizeOf(u32)]u8,
-    iteration_byte: [1]u8,
-    vertex_count: [@sizeOf(u32)]u8,
-    // Try to saturate internal Linux sockets
-    xyz_coords: [XYZ_COORDS_SIZE_BYTES]u8,
-    line_start_end: [@sizeOf(f32) * 6]u8,
-    text: [1024]u8,
-  };
 
   var buffers = RPCBuffers{
     .command_bytes  = [1]u8{0},
@@ -330,28 +381,16 @@ pub fn main() !void {
     .raylib = null,
   };
 
+  var model_maybe: ?raylib.Model = null;
+
   // The vertices that we track between first iteration renders. We use these
   // vertices to figure out what part of the model to focus on. In other words,
   // we focus on the part of the model that is changing.
   var vertices_delta_first_render: ?[]raylib.Vector3 = null;
   var focused = false;
 
-  const Annotation = struct {
-    id: u32,
-    line: struct {
-      start: raylib.Vector3,
-      end: raylib.Vector3,
-    } = .{
-      .start = .{ .x = 0, .y = 0, .z = 0 },
-      .end = .{ .x = 0, .y = 0, .z = 0 },
-    },
-    text: []u8 = "",
-  };
-
   var annotations = std.ArrayList(Annotation).init(std.heap.raw_c_allocator);
   var target_annotation_index: u32 = 0;
-
-  var model_maybe: ?raylib.Model = null;
 
   var server = std.net.StreamServer.init(.{});
   defer server.deinit();
@@ -372,15 +411,15 @@ pub fn main() !void {
     out: {
       if (mesh.iteration != 0 or focused == true) break :out;
       if (vertices_delta_first_render) |vertices| {
-        if (vertices.len < 3) break :out; // Nothing to really center on.
+        if (vertices.len < 3) break :out; // Nothing to really focus on.
 
         const bb = boundingBoxOfVertices(vertices);
-        const center = raylib.Vector3Lerp(bb.min, bb.max, 1/2);
+        const center = raylib.Vector3Lerp(bb.min, bb.max, 0.5);
         const dist = raylib.Vector3Distance(center, bb.max);
         camera.position = raylib.Vector3Add(
           raylib.Vector3Scale(
             Neg(GetCameraForward(camera)),
-            dist * 1.33
+            dist * 1.33 // 1.33 is an arbitrary scale. It just looks nice.
           ),
           center
         );
@@ -389,12 +428,15 @@ pub fn main() !void {
       }
     }
 
-    // Our custom input handling that affects the camera
+    // Look here for input handling also.
     updateCamera(&camera);
     
-    // Send camera position to shader.
-    raylib.SetShaderValue(shader, shader.locs[raylib.SHADER_LOC_VECTOR_VIEW],
-                          &camera.position, raylib.SHADER_UNIFORM_VEC3);
+    raylib.SetShaderValue(
+      shader,
+      shader.locs[raylib.SHADER_LOC_VECTOR_VIEW],
+      &camera.position,
+      raylib.SHADER_UNIFORM_VEC3
+    );
 
     raylib.BeginDrawing();
     raylib.ClearBackground(raylib.WHITE);
@@ -405,6 +447,8 @@ pub fn main() !void {
       raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.BLUE);
     }
 
+    // For now we only draw annotation lines. Drawing the text will involve
+    // adding a lot of raylib code.
     for (annotations.items) |annotation| {
       raylib.DrawLine3D(annotation.line.start, annotation.line.end, raylib.BLACK);
     }
@@ -412,20 +456,20 @@ pub fn main() !void {
     raylib.EndMode3D();
     raylib.EndDrawing();
 
-    blk: {
+    out: {
       switch (state) {
         .wait_command => {
           var accepted_addr: std.net.Address = undefined;
           var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
           const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
-          if (connection_maybe != null) { break :blk; }
+          if (connection_maybe != null) { break :out; }
           if (accept_result >= 0) {
             connection_maybe = std.net.StreamServer.Connection{
               .stream = std.net.Stream{ .handle = @intCast(accept_result) },
               .address = accepted_addr,
             };
           } else {
-            break :blk;
+            break :out;
           }
 
           const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
@@ -433,6 +477,7 @@ pub fn main() !void {
 
           const command: Command = @enumFromInt(buffers.command_bytes[0]);
           state = switch (command) {
+            Command.unknown => continue,
             Command.render => .read_mesh_id,
             Command.annotate => .read_annotation_id,
             Command.quit => .shutdown,
@@ -483,7 +528,7 @@ pub fn main() !void {
         .load_model => {
           const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.command_bytes);
 
-          // If there's no acknowledge byte, skip this until we get one.
+          // Wait for "acknowledge byte".
           if (bytes_read != 1 or buffers.command_bytes[0] != 1) continue;
 
           // Unload previous model from VRAM. This unloads the model's mesh.
@@ -492,14 +537,22 @@ pub fn main() !void {
           // Create the new mesh/model from the streamed data
           model_maybe = try mesh.loadModel(std.heap.raw_c_allocator, shader);
 
-          // If we're on the first iteration, figure out and focus on changes
+          // If we're on the first iteration, calculate and focus on changes
           if (mesh.iteration == 0) {
             focused = false;
             if (vertices_delta_first_render) |vertices| {
-              const tmp = try diffVector3Slices(std.heap.c_allocator, vertices, u8sToVector3s(mesh.vertices.?.items));
-              if (tmp.len > 0) {
-                vertices_delta_first_render = tmp;
+              const different_vertices = try diffVector3Slices(
+                std.heap.c_allocator,
+                vertices,
+                u8sToVector3s(mesh.vertices.?.items)
+              );
+
+              if (different_vertices.len > 0) {
+                vertices_delta_first_render = different_vertices;
               }
+
+            // This will only occur on the absolutely first render, like when
+            // the program starts.
             } else {
               vertices_delta_first_render = u8sToVector3s(mesh.vertices.?.items);
             }
@@ -511,6 +564,8 @@ pub fn main() !void {
           connection_maybe.?.stream.close();
           connection_maybe = null;
         },
+
+        // Tracks annotations so they aren't duplicated when re-rendering.
         .read_annotation_id => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.id_bytes);
           const id = std.mem.bytesToValue(u32, &buffers.id_bytes);
@@ -523,8 +578,8 @@ pub fn main() !void {
             break;
           }
 
-          // 0 means abort the sequence of events that would normally come
           if (found) {
+            // 0 means abort the sequence of events that would normally happen.
             _ = try connection_maybe.?.stream.write(&.{0});
             state = .wait_command;
           } else {
@@ -583,22 +638,3 @@ pub fn main() !void {
   }
 }
 
-fn computeNormals(
-  allocator: std.mem.Allocator,
-  vertices: []raylib.Vector3,
-) ![]raylib.Vector3 {
-  // One normal per vertex.
-  var normals = try allocator.alloc(raylib.Vector3, vertices.len);
-  
-  // For each triangle
-  for (0..vertices.len / 3) |j| {
-    const v = raylib.Vector3Normalize(raylib.Vector3CrossProduct(
-      raylib.Vector3Subtract(vertices[3 * j + 1], vertices[3 * j]),
-      raylib.Vector3Subtract(vertices[3 * j + 2], vertices[3 * j])));
-    normals[3 * j] = v;
-    normals[3 * j + 1] = v;
-    normals[3 * j + 2] = v;
-  }
-
-  return normals;
-}
