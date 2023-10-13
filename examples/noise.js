@@ -3,9 +3,9 @@
 // It sucks because I don't understand something.
 // These were all taken from Inigo Iquilez.
 // 
-const { X, Y, Z, toLibfiveValue, sin, fract, floor, step, max, dot, length, saveAsSTL, abs } = require("../index");
+const { X, Y, Z, toLibfiveValue, sin, fract, floor, step, max, dot, length, preview, abs } = require("../index");
 
-const resolution = 0.5;
+const resolution = 0.1;
 const region = [300, 300, 300];
 
 const $ = toLibfiveValue;
@@ -53,6 +53,6 @@ const fbm = (noiseFn) => {
   return $Z.sub($f.mul(1));
 };
 
-const wave = fbm(simplex2D);
+const model = () => fbm(simplex2D);
 
-saveAsSTL(wave, [region.mul(-1), region], resolution, "waves.stl");
+preview(model, [region.mul(-1), region], resolution, resolution);

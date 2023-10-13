@@ -1,74 +1,74 @@
 // Parametric shipping box!
 
 const { preview } = require("../utils/preview");
-const { box, mm, cm } = require("../index.js");
+const { box, mm, cm, deg } = require("../index.js");
 
 // Modify the parameters to get a box that fits your needs.
 const dimensions = [5*cm, 5*cm, 5*cm];
 
-const printer = { nozzleWidth: 0.6*mm, layerHeight: 0.4*mm, };
+const model = () => {
+  const printer = { nozzleWidth: 0.6*mm, layerHeight: 0.4*mm, };
 
-const wallThickness = printer.nozzleWidth * 4;
-const floorThickness = printer.layerHeight * 3;
+  const wallThickness = printer.nozzleWidth * 4;
+  const floorThickness = printer.layerHeight * 3;
 
-// Not obvious what the ratio is here but 0.1 ~= 0.5*cm in this case.
-const rounding = 0.1;
-const offset = { rounding: 0.5*cm, };
+  // NOTE: This example was ported from an older version that rounded things.
+  // For the sake of simplicity I've left out the rounding.
+  // Not obvious what the ratio is here but 0.1 ~= 0.5*cm in this case.
+  const rounding = 0.1;
+  const offset = { rounding: 0.5*cm, };
 
-const base = box.exact(dimensions, rounding);
+  const base = box.exact(dimensions);
 
-const bottomCut = box.exact([dimensions[0], dimensions[1], offset.rounding], false);
+  const bottomCut = box.exact([dimensions[0], dimensions[1], offset.rounding]);
 
-const cutout = box.exact(
-  [
-    dimensions[0] - wallThickness,
-    dimensions[1] - wallThickness,
-    (dimensions[2] - floorThickness) - offset.rounding
-  ],
-  rounding
-).move([wallThickness, wallThickness, floorThickness]);
+  const cutout = box.exact(
+    [
+      dimensions[0] - wallThickness * 2,
+      dimensions[1] - wallThickness * 2,
+      (dimensions[2] - floorThickness) - offset.rounding
+    ]
+  ).move([0, 0, floorThickness]);
 
-const clip = {
-  xAxis: [Math.sqrt(dimensions[0]), wallThickness*2, Math.sqrt(dimensions[2])],
-  yAxis: [wallThickness*2, Math.sqrt(dimensions[1]), Math.sqrt(dimensions[2])],
+  // There's lots of divide-by-2 because everything is centered by default.
+
+  const topHeight = offset.rounding;
+  const top = box.exact([dimensions[0], dimensions[1], topHeight])
+    .move([0, 0, dimensions[2]/2 - topHeight/2]);
+
+  const clip = {
+    xAxis: [Math.sqrt(dimensions[0]), wallThickness*2, Math.sqrt(dimensions[2])],
+    yAxis: [wallThickness*2, Math.sqrt(dimensions[1]), Math.sqrt(dimensions[2])],
+  };
+
+  const clipXAxis = box.exact(clip.xAxis)
+    .move([
+      dimensions[0]/2 - clip.xAxis[0]/2 - wallThickness/2,
+      0,
+      dimensions[2]/2 - topHeight - clip.xAxis[2]/2
+    ]);
+
+  const clipYAxis = clipXAxis.rotateZ(90*deg);
+
+  const clipsXY = clipXAxis.union(clipYAxis);
+
+  // As an exercise, try to make this parametric. The parameter is N clips.
+  // You'll want to *distribute them* in some sort of fashion.
+  const clips = clipsXY.union(clipsXY.rotateZ(180*deg));
+
+  const shippingBoxTop =
+    top.union(clips)
+
+  const shippingBoxBottom = base
+    .difference(cutout)
+    .difference(shippingBoxTop);
+
+  return shippingBoxBottom.union(shippingBoxTop.move([0, 0, topHeight+clip.xAxis[2]]));
 };
 
-const clipXAxisNear = box.exact(clip.xAxis, false)
-  .move([(dimensions[0] - clip.xAxis[0]) / 2, wallThickness/2, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
-const clipXAxisFar = box.exact(clip.xAxis, false)
-  .move([(dimensions[0] - clip.xAxis[0]) / 2, dimensions[1] - wallThickness - clip.xAxis[1]/2, (dimensions[2] - offset.rounding) - clip.xAxis[2]])
-const clipYAxisNear = box.exact(clip.yAxis, false)
-  .move([wallThickness/2, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
-const clipYAxisFar = box.exact(clip.yAxis, false)
-  .move([dimensions[0] - wallThickness - clip.yAxis[0]/2, (dimensions[1] - clip.yAxis[1]) / 2, (dimensions[2] - offset.rounding) - clip.yAxis[2]])
+const bb = [
+  dimensions.div(-2).add(-1).add(-20),
+  dimensions.div(2).add(1).add(20)
+];
 
-const clips = clipXAxisFar.union(clipXAxisNear).union(clipYAxisFar).union(clipYAxisNear);
-
-const wallIntersectionsX = box
-  .exact([clip.xAxis[0], dimensions[1] - wallThickness, clip.xAxis[2]])
-  .move([dimensions[0]/2, dimensions[1]/2, (dimensions[2] - offset.rounding/2) - clip.yAxis[2]/2]);
-
-const wallIntersectionsY = box
-  .exact([dimensions[0] - wallThickness, clip.yAxis[1], clip.yAxis[2]])
-  .move([dimensions[0]/2, dimensions[1]/2, (dimensions[2] - offset.rounding/2) - clip.yAxis[2]/2]);
-
-const top = box.exact([0,0,0], [dimensions[0], dimensions[1], offset.rounding/2], false)
-  .move([0, 0, dimensions[2] - offset.rounding/2]);
-
-const shippingBoxTop = base.intersection(
-  top
-  .blend(clips, 8.0)
-  .intersection(
-    top.union(wallIntersectionsX.union(wallIntersectionsY))
-  )
-);
-
-const shippingBoxBottom = base
-  .difference(bottomCut)
-  .difference(cutout.move([0, 0, offset.rounding]))
-  .difference(shippingBoxTop);
-
-const result = shippingBoxTop;
-
-preview(result, [[0,0,0], dimensions], 1, 4);
-//saveAsSTL(shippingBoxTop, [[0,0,0], dimensions], 1, "shipping-box-top.stl");
+preview(model, bb, 0.1, 0.4);
