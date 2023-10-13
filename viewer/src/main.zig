@@ -353,9 +353,21 @@ pub fn main() !void {
   // represents the source of light. We just care about showing a light though.
   _ = rlights.CreateLight(
     rlights.LightType.point,
-    .{ .x = 10, .y = -25.0, .z = 100.0 }, // an arbitrary point way up in the sky.
+    .{ .x = 100, .y = 0.0, .z = 0.0 },
     raylib.Vector3Zero(),
-    raylib.WHITE, shader
+    raylib.RED, shader
+  ).?;
+  _ = rlights.CreateLight(
+    rlights.LightType.point,
+    .{ .x = 0, .y = 100.0, .z = 0.0 },
+    raylib.Vector3Zero(),
+    raylib.GREEN, shader
+  ).?;
+  _ = rlights.CreateLight(
+    rlights.LightType.point,
+    .{ .x = 0, .y = 0.0, .z = 100.0 },
+    raylib.Vector3Zero(),
+    raylib.BLUE, shader
   ).?;
 
   // 60 is arbitrary. To be honest this could probably be even lower to save
