@@ -334,6 +334,7 @@ pub fn main() !void {
   // vertices to figure out what part of the model to focus on. In other words,
   // we focus on the part of the model that is changing.
   var vertices_delta_first_render: ?[]raylib.Vector3 = null;
+  var focused = false;
 
   const Annotation = struct {
     id: u32,
@@ -368,9 +369,12 @@ pub fn main() !void {
   while (!raylib.WindowShouldClose() and state != .shutdown) {
     
     // If it's the first render, focus on the changes
-    if (mesh.iteration == 0) {
-      if (mesh.vertices) |vertices| {
-        const bb = boundingBoxOfVertices(u8sToVector3s(vertices.items));
+    out: {
+      if (mesh.iteration != 0 or focused == true) break :out;
+      if (vertices_delta_first_render) |vertices| {
+        if (vertices.len < 3) break :out; // Nothing to really center on.
+
+        const bb = boundingBoxOfVertices(vertices);
         const center = raylib.Vector3Lerp(bb.min, bb.max, 1/2);
         const dist = raylib.Vector3Distance(center, bb.max);
         camera.position = raylib.Vector3Add(
@@ -381,6 +385,7 @@ pub fn main() !void {
           center
         );
         camera.target = center;
+        focused = true;
       }
     }
 
@@ -489,8 +494,12 @@ pub fn main() !void {
 
           // If we're on the first iteration, figure out and focus on changes
           if (mesh.iteration == 0) {
+            focused = false;
             if (vertices_delta_first_render) |vertices| {
-              vertices_delta_first_render = try diffVector3Slices(std.heap.c_allocator, vertices, u8sToVector3s(mesh.vertices.?.items));
+              const tmp = try diffVector3Slices(std.heap.c_allocator, vertices, u8sToVector3s(mesh.vertices.?.items));
+              if (tmp.len > 0) {
+                vertices_delta_first_render = tmp;
+              }
             } else {
               vertices_delta_first_render = u8sToVector3s(mesh.vertices.?.items);
             }
