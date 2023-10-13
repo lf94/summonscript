@@ -764,7 +764,7 @@ fn Set(comptime T: type, comptime Ctx: type) type {
 // // Sets of Tris.
 // const TriSet = Set(Tri, TriContext);
 
-// Gather triangles that are in slice 'a' and not in set 'b'. Caller
+// Gather triangles that are in set 'a' and not in set 'b'. Caller
 // owns result.
 fn setMinus(comptime T: type, comptime Ctx: type,
             allocator: std.mem.Allocator, a: Set(T, Ctx), b: Set(T, Ctx)) ![]Tri {
@@ -782,21 +782,23 @@ fn setMinus(comptime T: type, comptime Ctx: type,
 
 // Build set from slice. Caller owns result.
 fn mkSet(comptime T: type, comptime Ctx: type,
-         allocator: std.mem.Allocator, tris: []Tri) !Set(T, Ctx) {
+         allocator: std.mem.Allocator, slice: []T) !Set(T, Ctx) {
   var m = Set(T, Ctx).init(allocator);
-  for (tris) |tri| {
-    try m.put(tri, {});
+  for (slice) |x| {
+    try m.put(x, {});
   }
   return m;
 }
 
-const Diff = struct {
-  deletions: []Tri,
-  insertions: []Tri
-};
+fn Diff(comptime T: type) type {
+  return struct {
+    deletions: []T,
+    insertions: []T
+  };
+}
 
 fn diff(comptime T: type, comptime Ctx: type,
-         allocator: std.mem.Allocator, old: Set(T, Ctx), new: Set(T, Ctx)) !Diff {
-  return Diff{.deletions = try setMinus(T, Ctx, allocator, old, new),
-              .insertions = try setMinus(T, Ctx, allocator, new, old)};
+        allocator: std.mem.Allocator, old: Set(T, Ctx), new: Set(T, Ctx)) !Diff(T) {
+  return Diff(T){.deletions = try setMinus(T, Ctx, allocator, old, new),
+                 .insertions = try setMinus(T, Ctx, allocator, new, old)};
 }
