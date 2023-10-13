@@ -12,8 +12,8 @@ const rlights = @import("rlights.zig");
 // When reaching the last one go back into "watching" mode.
 
 const Command = enum(u8) {
-  unknown = 0, // Just to make it clear, even though enums start at 0.
-  render,
+  unknown = 0,
+  render = 1,
   annotate,
   quit,
 };
@@ -317,6 +317,8 @@ const RPCBuffers = struct {
 };
 
 pub fn main() !void {
+  const stdout = std.io.getStdOut().writer();
+  
   const screen = .{ .width = 640, .height = 480, };
 
   raylib.SetConfigFlags(raylib.FLAG_MSAA_4X_HINT);
@@ -339,11 +341,10 @@ pub fn main() !void {
 
   // "Location" is essentially a "pointer reference".
   // Allows for communication between our program and the shader.
-  shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] =
-    raylib.GetShaderLocation(shader, "viewPos");
+  shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] = raylib.GetShaderLocation(shader, "viewPos");
 
   // equiv. to RGBA
-  var ambient_value = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
+  var ambient_value: raylib.Vector4 = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
 
   var ambient_loc = raylib.GetShaderLocation(shader, "ambient");
   raylib.SetShaderValue(shader, ambient_loc, &ambient_value, raylib.SHADER_UNIFORM_VEC4);
@@ -396,13 +397,19 @@ pub fn main() !void {
   defer server.deinit();
 
   const SOCKET_PATH = "/tmp/libfive_mesh.sock";
+
+  // Make sure the file doesn't exist before or after.
+  std.fs.cwd().deleteFile(SOCKET_PATH) catch {};
   const socket_address = try std.net.Address.initUnix(SOCKET_PATH);
-  defer std.fs.cwd().deleteFile(SOCKET_PATH) catch unreachable;
+  defer std.fs.cwd().deleteFile(SOCKET_PATH) catch {};
 
   try server.listen(socket_address);
   const sockfd = server.sockfd.?;
+
+  // Set the non-blocking flag (and avoid overwriting the other set flags)
   const flags = fcntl.fcntl(sockfd, fcntl.F_GETFL);
   _ = fcntl.fcntl(sockfd, fcntl.F_SETFL, flags | fcntl.O_NONBLOCK);
+
   var connection_maybe: ?std.net.StreamServer.Connection = null;
 
   while (!raylib.WindowShouldClose() and state != .shutdown) {
@@ -483,31 +490,31 @@ pub fn main() !void {
             Command.quit => .shutdown,
           };
 
-          std.debug.print("Acknowledging command\n", .{});
+          try stdout.print("Acknowledging command\n", .{});
 
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_mesh_id => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.id_bytes);
           mesh.id = std.mem.bytesToValue(u32, &buffers.id_bytes);
-          std.debug.print("read_id -> read_iteration\n", .{});
+          try stdout.print("read_id -> read_iteration\n", .{});
           state = .read_iteration;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_iteration => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.iteration_byte);
           mesh.iteration = buffers.iteration_byte[0];
-          std.debug.print("Iteration: {}\n", .{ mesh.iteration });
+          try stdout.print("Iteration: {}\n", .{ mesh.iteration });
 
-          std.debug.print("read_iteration -> read_vertex_count\n", .{});
+          try stdout.print("read_iteration -> read_vertex_count\n", .{});
           state = .read_vertex_count;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_vertex_count => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.vertex_count);
           mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
-          std.debug.print("Vertex count: {}\n", .{mesh.vertexCount});
-          std.debug.print("read_vertex_count -> read_vertices transition\n", .{});
+          try stdout.print("Vertex count: {}\n", .{mesh.vertexCount});
+          try stdout.print("read_vertex_count -> read_vertices transition\n", .{});
           mesh.vertices = std.ArrayList(u8).init(std.heap.raw_c_allocator);
           state = .read_vertices;
           _ = try connection_maybe.?.stream.write(&.{1});
@@ -521,7 +528,7 @@ pub fn main() !void {
           try mesh.vertices.?.appendSlice(buffers.xyz_coords[0..bytes_read]);
           if ((mesh.vertices.?.items.len / 4 / 3) != mesh.vertexCount) continue;
           
-          std.debug.print("read_vertices -> load_model transition\n", .{});
+          try stdout.print("read_vertices -> load_model transition\n", .{});
           state = .load_model;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
@@ -559,7 +566,7 @@ pub fn main() !void {
           }
 
           state = .wait_command;
-          std.debug.print("load_model -> wait_command transition\n", .{});
+          try stdout.print("load_model -> wait_command transition\n", .{});
           _ = try connection_maybe.?.stream.write(&.{1});
           connection_maybe.?.stream.close();
           connection_maybe = null;
@@ -583,11 +590,11 @@ pub fn main() !void {
             _ = try connection_maybe.?.stream.write(&.{0});
             state = .wait_command;
           } else {
-            std.debug.print("Appending new annotation {}\n", .{ id });
+            try stdout.print("Appending new annotation {}\n", .{ id });
             try annotations.append(Annotation { .id = id });
 
             target_annotation_index = @intCast(annotations.items.len - 1);
-            std.debug.print("index {}\n", .{ target_annotation_index });
+            try stdout.print("index {}\n", .{ target_annotation_index });
 
             _ = try connection_maybe.?.stream.write(&.{1});
             state = .read_annotation_line_start_end;
@@ -611,7 +618,7 @@ pub fn main() !void {
             }
           };
 
-          std.debug.print("read_annotation_line_start_end -> read_annotation_text\n", .{});
+          try stdout.print("read_annotation_line_start_end -> read_annotation_text\n", .{});
           state = .read_annotation_text;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
@@ -624,14 +631,14 @@ pub fn main() !void {
           std.mem.copy(u8, text, buffers.text[0..bytes_read]);
           annotation.text = text;
 
-          std.debug.print("read_annotation_text -> wait_command \n", .{});
+          try stdout.print("read_annotation_text -> wait_command \n", .{});
           state = .wait_command;
           _ = try connection_maybe.?.stream.write(&.{1});
           connection_maybe.?.stream.close();
           connection_maybe = null;
         },
         .shutdown => {
-          std.debug.print("Shutting down\n", .{});
+          try stdout.print("Shutting down\n", .{});
         },
       }
     }
