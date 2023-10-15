@@ -1,9 +1,7 @@
 const net = require("node:net");
 
 const koffi = require("koffi");
-const {
-  libfive_mesh_delete,
-} = require("../libfive");
+const { libfive_mesh_delete, } = require("../libfive");
 
 const preview = (sdfFn, boundingBox, currentResolution, targetResolution, n = 0) => {
     const p = new Promise((resolve, reject) => {
