@@ -390,7 +390,7 @@ pub fn main() !void {
   ).?;
   _ = rlights.CreateLight(
     rlights.LightType.point,
-    .{ .x = 0, .y = 100.0, .z = 0.0 },
+    .{ .x = 0, .y = -100.0, .z = 0.0 }, // More intuitive in front
     raylib.Vector3Zero(),
     raylib.GREEN, shader
   ).?;
@@ -506,7 +506,7 @@ pub fn main() !void {
     raylib.BeginMode3D(camera);
 
     if (model_maybe) |model| {
-      raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.BLUE);
+      raylib.DrawModel(model, .{ .x = 0, .y = 0, .z = 0 }, 1, raylib.WHITE);
     }
 
     // For now we only draw annotation lines. Drawing the text will involve
