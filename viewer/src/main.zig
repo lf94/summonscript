@@ -469,8 +469,6 @@ pub fn main() !void {
       if (vertices_delta_first_render_insertions) |vertices| {
         if (vertices.len < 3) break :out; // Nothing to really center on.
 
-        std.debug.print("\n{any}\n", .{vertices_delta_first_render_deletions});
-
         var bb = boundingBoxOfVertices(vertices);
         if (vertices_delta_first_render_deletions.?.len > 3) {
           bb = boundingBoxUnion(

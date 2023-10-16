@@ -12,6 +12,7 @@
 * Streaming mesh viewer for a tight feedback loop
 * Compatible with any text editor
 * Small technology stack
+* Forever non-breaking version changes
 * Has a fun theme around magic :D
 
 ## Demo
@@ -20,15 +21,18 @@
 
 ## Installation
 
-You'll need three things: NodeJS 0.19, Zig 0.11 and raylib.
+You'll need four things: NodeJS 0.19, Zig 0.11, raylib and libfive.
 
-Honestly the versions of these shouldn't matter too much.
+Honestly the versions of these shouldn't matter *too* much.
 
-Then run `npm install` so it can install koffi, the FFI binding package. (Imagine
-that, a single JS dependency for this project :)
+I suggest searching how to install all of these, as their instructions could
+change at any time, or could be easier for your platform.
 
-Finally, go into `viewer/` and build it with `zig build`. The binary is output to
-`zig-out/` so feel free to install it anywhere.
+After installing those, run `npm install` so it can install koffi, the FFI
+binding package. (Imagine that, a single JS dependency for this project :)
+
+Finally, go into `viewer/` and build it with `zig build`. The binary is output
+to `zig-out/` so feel free to install it anywhere.
 
 You're done.
 
@@ -86,4 +90,4 @@ someone, so please let me know if I've missed you.
 * CadQuery team
 * my partner who's had to deal with me asking "come look!" a million times :D
 * my friends who had to suffer similarly
-* rask (code and knowledge contributions)
+* rask (code, knowledge contributions)

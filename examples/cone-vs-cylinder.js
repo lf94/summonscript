@@ -12,7 +12,6 @@ const model = () => {
     .union(cyl2.move([15, 0, 0]));
 };
 
-const res = 1.0;
 const region = [45+2,45+2,45+2];
 
-preview(model, [region.mul(-1), region], 1, 4);
+preview(model(), [region.mul(-1), region], 1, 4);

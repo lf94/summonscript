@@ -6,7 +6,7 @@ const { libfive_mesh_delete, } = require("../libfive");
 const preview = (sdfFn, boundingBox, currentResolution, targetResolution, n = 0) => {
     const p = new Promise((resolve, reject) => {
       console.log("Meshing");
-      const meshMemory = sdfFn().toMesh(boundingBox, currentResolution);
+      const meshMemory = sdfFn.toMesh(boundingBox, currentResolution);
       console.log("Meshed");
 
       const mesh = koffi.decode(meshMemory, "libfive_mesh");

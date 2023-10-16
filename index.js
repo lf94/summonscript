@@ -115,6 +115,7 @@ const difference = (a, b) => binary("max")(a, neg(b));
 const intersection = binary("max");
 
 const atan2 = binary("atan2");
+const atan = unary("atan");
 
 const free = ({ value }) => libfive_tree_delete(value);
 
@@ -159,80 +160,80 @@ const inverse = (a_) => {
 const move = (shape, base_) => {
   const [x,y,z] = XYZ();
   const base = toLibfiveValue(base_).value;
-  return shape.remap(x.sub(base[0]), y.sub(base[1]), z.sub(base[2]));
+  return shape.remap([x.sub(base[0]), y.sub(base[1]), z.sub(base[2])]);
 };
 
 const elongate = (shape, hs) =>  {
   const xyz = XYZ();
   const q = abs(xyz).sub(hs).value;
   const q2 = [max(q[0], 0), max(q[1], 0), max(q[2], 0)];
-  return shape.remap(q2[0], q2[1], q2[2]).add(min(max(q[0],max(q[1],q[2])),0.0));
+  return shape.remap([q2[0], q2[1], q2[2]]).add(min(max(q[0],max(q[1],q[2])),0.0));
 };
 
 const scale_x = (shape, a_) => {
   const [x,y,z] = XYZ();
   const a = toLibfiveValue(a_);
-  return shape.remap(x.div(a), y, z);
+  return shape.remap([x.div(a), y, z]);
 };
 
 const scale_y = (shape, a_) => {
   const [x,y,z] = XYZ();
   const a = toLibfiveValue(a_);
-  return shape.remap(x, y.div(a), z);
+  return shape.remap([x, y.div(a), z]);
 };
 
 const scale_z = (shape, a_) => {
   const [x,y,z] = XYZ();
   const a = toLibfiveValue(a_);
-  return shape.remap(x, y, z.div(a));
+  return shape.remap([x, y, z.div(a)]);
 };
 
 const rotate_x = (shape, angle, center) => {
   const [x,y,z] = XYZ();
 
   const a = shape.move(neg(center));
-  return shape.remap(
+  return shape.remap([
     x,
     cos(angle).mul(y).add(sin(angle).mul(z)),
     neg(sin(angle)).mul(y).add(cos(angle).mul(z))
-  ).move(center);
+  ]).move(center);
 }
 
 const rotate_y = (shape, angle, center) => {
   const [x,y,z] = XYZ();
 
   const a = shape.move(neg(center));
-  return shape.remap(
+  return shape.remap([
     cos(angle).mul(x).add(sin(angle).mul(z)),
     y,
     neg(sin(angle)).mul(x).add(cos(angle).mul(z))
-  ).move(center);
+  ]).move(center);
 }
 
 const rotate_z = (shape, angle, center) => {
   const [x,y,z] = XYZ();
 
   const a = shape.move(neg(center));
-  return shape.remap(
+  return shape.remap([
     cos(angle).mul(x).add(sin(angle).mul(y)),
     neg(sin(angle)).mul(x).add(cos(angle).mul(y)),
     z,
-  ).move(center);
+  ]).move(center);
 }
 
 const reflect_x = (shape, x0) => {
   const [x,y,z] = XYZ();
-  return shape.remap(x0.mul(2).sub(x), y, z);
+  return shape.remap([x0.mul(2).sub(x), y, z]);
 };
 
 const reflect_y = (shape, y0) => {
   const [x,y,z] = XYZ();
-  return shape.remap(x, y0.mul(2).sub(y), z);
+  return shape.remap([x, y0.mul(2).sub(y), z]);
 };
 
 const reflect_z = (shape, z0) => {
   const [x,y,z] = XYZ();
-  return shape.remap(x, y, z0.mul(2).sub(z));
+  return shape.remap([x, y, z0.mul(2).sub(z)]);
 };
 
 const extrude_z = (shape, zmin_, zmax_) => {
@@ -245,7 +246,7 @@ const extrude_z = (shape, zmin_, zmax_) => {
 const revolve_y = (shape) => {
   const [x, y, z] = XYZ();
   const r = sqrt(x.square().add(z.square()));
-  return shape.remap(r, y, z).union(shape.remap(neg(r), y, z));
+  return shape.remap([r, y, z]).union(shape.remap([neg(r), y, z]));
 };
 
 const taper_xy_z = (shape, base_, height_, scale_, base_scale_) => {
@@ -256,7 +257,7 @@ const taper_xy_z = (shape, base_, height_, scale_, base_scale_) => {
   const base_scale = toLibfiveValue(base_scale_);
 
   const s = height.div(scale.mul(z).add(base_scale.mul(height.sub(z))));
-  return shape.move(neg(base)).remap(x.mul(s), y.mul(s), z).move(base);
+  return shape.move(neg(base)).remap([x.mul(s), y.mul(s), z]).move(base);
 };
 
 const clearance = (a, b, o_) => {
@@ -441,7 +442,7 @@ class LibfiveValue {
     this.value = x;
   }
 
-  remap(x, y, z) { return toLibfiveValue(libfive_tree_remap(this.value, x.value, y.value, z.value)); }
+  remap(xyz) { return toLibfiveValue(libfive_tree_remap(this.value, xyz[0].value, xyz[1].value, xyz[2].value)); }
   add(b) { return add(this, toLibfiveValue(b)); }
   sub(b) { return sub(this, toLibfiveValue(b)); }
   mul(b) { return mul(this, toLibfiveValue(b)); }
@@ -494,7 +495,12 @@ class LibfiveValue {
     return libfive_tree_print(this.value);
   }
   toMesh(bb, res) {
-    return libfive_tree_render_mesh(this.value, Region3(bb[0], bb[1]), res );
+    return libfive_tree_render_mesh(
+      // It's very weird, but nothing().union(...) is necessary to prevent segfault...
+      nothing().union(this).value,
+      Region3(bb[0], bb[1]),
+      res
+    );
   }
 };
 
@@ -657,6 +663,7 @@ module.exports = {
   ellipsoid,
   sphere,
   atan2,
+  atan,
   triangle: triangle_,
   cylinder,
   cone,
