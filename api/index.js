@@ -97,12 +97,12 @@ const binary = (name) => (a_, b_) => {
 // This is how you'd normally use the wrapper.
 
 const math = require("./lib/math");
-const sdf = require("./lib/sdf");
+const transforms = require("./lib/transforms");
 
 class LibfiveValue {
   constructor(x) { this.value = x; }
 
-  remap(xyz) { return sdf.remap(this, xyz); }
+  remap(xyz) { return transforms.remap(this, xyz); }
   add(b) { return math.add(this, b); }
   sub(b) { return math.sub(this, b); }
   mul(b) { return math.mul(this, b); }
@@ -112,39 +112,39 @@ class LibfiveValue {
   dot(b) { return math.dot(this, b); }
   fract() { return math.fract(this); }
   square() { return math.square(this); }
-  union(b) { return sdf.union(this, b); }
-  difference(b) { return sdf.difference(this, b); }
-  intersection(b) { return sdf.intersection(this, b); }
+  union(b) { return transforms.union(this, b); }
+  difference(b) { return transforms.difference(this, b); }
+  intersection(b) { return transforms.intersection(this, b); }
   inverse() { return math.inverse(value); }
   offset(o) { return this.sub(o); }
-  shell(o) { return sdf.shell(this, o); }
-  blend(b, m) { return sdf.blend.smooth(this, b, m); }
-  elongate(h) { return sdf.elongate(this, h); }
-  blendDifference(b, m) { return sdf.blend.difference2(this, b, toLibfiveValue(m)); }
-  rotateX(radians) { return sdf.rotateX(this, radians, [0,0,0]); }
-  rotateY(radians) { return sdf.rotateY(this, radians, [0,0,0]); }
-  rotateZ(radians) { return sdf.rotateZ(this, radians, [0,0,0]); }
+  shell(o) { return transforms.shell(this, o); }
+  blend(b, m) { return transforms.blend.smooth(this, b, m); }
+  elongate(h) { return transforms.elongate(this, h); }
+  blendDifference(b, m) { return transforms.blend.difference2(this, b, toLibfiveValue(m)); }
+  rotateX(radians) { return transforms.rotateX(this, radians, [0,0,0]); }
+  rotateY(radians) { return transforms.rotateY(this, radians, [0,0,0]); }
+  rotateZ(radians) { return transforms.rotateZ(this, radians, [0,0,0]); }
   //symmetricX: () => toLibfiveValue(symmetric_x(value)),
   //symmetricY: () => toLibfiveValue(symmetric_y(value)),
   //symmetricZ: () => toLibfiveValue(symmetric_z(value)),
-  scaleX(amount) { return sdf.scaleX(this, amount); }
-  scaleY(amount) { return sdf.scaleY(this, amount); }
-  scaleZ(amount) { return sdf.scaleZ(this, amount); }
+  scaleX(amount) { return transforms.scaleX(this, amount); }
+  scaleY(amount) { return transforms.scaleY(this, amount); }
+  scaleZ(amount) { return transforms.scaleZ(this, amount); }
   // scaleXYZ: (xyz) => toLibfiveValue(scale_xyz(value, TVec3(...xyz), TVec3(0,0,0))),
-  reflectX(offset) { return sdf.reflectX(this, toLibfiveValue(offset)); }
-  reflectY(offset) { return sdf.reflectY(this, toLibfiveValue(offset)); }
-  reflectZ(offset) { return sdf.reflectZ(this, toLibfiveValue(offset)); }
+  reflectX(offset) { return transforms.reflectX(this, toLibfiveValue(offset)); }
+  reflectY(offset) { return transforms.reflectY(this, toLibfiveValue(offset)); }
+  reflectZ(offset) { return transforms.reflectZ(this, toLibfiveValue(offset)); }
   //reflectXY: () => reflect_xz(value),
   //reflectYZ: () => reflect_yz(value),
   //reflectXZ: () => reflect_xz(value),
   //twirlX: (amount, radius, offset) => twirl_x(value, amount, radius, TVec3(...offset))),
   //twirlY: (amount, radius, offset) => twirl_y(value, amount, radius, TVec3(...offset))),
   //twirlZ(amount, radius, offset) { toLibfiveValue(twirl_z(value, Value(amount).value, Value(radius).value, TVec3(...offset))) }
-  taperXYZ(base, height, scale, baseScale) { return csg.taperXYAlongZ(this, base, height, scale, baseScale); }
+  taperXYZ(base, height, scale, baseScale) { return transforms.taperXYAlongZ(this, base, height, scale, baseScale); }
   //arrayX: (amount, distanceBetween) => toLibfiveValue(array_x(value, amount, Value(distanceBetween).value)),
-  extrudeZ(zmin, zmax) { return csg.extrudeZ(this, zmin, zmax); }
-  revolveY() { return csg.revolveY(this); }
-  move(xyz) { return csg.move(this, xyz); }
+  extrudeZ(zmin, zmax) { return transforms.extrudeZ(this, zmin, zmax); }
+  revolveY() { return transforms.revolveY(this); }
+  move(xyz) { return transforms.move(this, xyz); }
   reify() {
     if (this.value instanceof Array) {
       return this.value.map((t) => libfive_tree_print(t.value));
