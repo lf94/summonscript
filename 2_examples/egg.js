@@ -2,7 +2,7 @@
 // This explains an egg is basiclly an intersection of 4 circles.
 // We copy this method, but then do a revolution to bring it into 3D.
 
-const { circle, half_space, preview } = require("../index");
+const { circle, halfSpace, Viewer } = require("../3_summonscript");
 
 // The egg is parameterized by it's bottom radius
 const egg = (d) => {
@@ -17,12 +17,12 @@ const egg = (d) => {
     .intersection(circle(d*2).move([r, 0, 0]))
 
   const wing = eye.difference(base)
-    .intersection(half_space([1,1,0]).move([0, r, 0]))
-    .intersection(half_space([1,-1,0]).move([0, r, 0]));
+    .intersection(halfSpace([1,1,0]).move([0, r, 0]))
+    .intersection(halfSpace([1,-1,0]).move([0, r, 0]));
 
   return base.union(wing)
-    .intersection(half_space([1, 0, 0]))
+    .intersection(halfSpace([1, 0, 0]))
     .revolveY();
 };
 
-preview(() => egg(0.5), [[-10, -10, -10], [10,10,10]], 5, 20);
+Viewer.upload(egg(1), [[-10, -10, -10], [10,10,10]], 5, 20);

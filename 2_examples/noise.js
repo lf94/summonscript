@@ -3,12 +3,12 @@
 // It sucks because I don't understand something.
 // These were all taken from Inigo Iquilez.
 // 
-const { X, Y, Z, toLibfiveValue, sin, fract, floor, step, max, dot, length, preview, abs } = require("../index");
+const { XYZ, Value, sin, fract, floor, step, max, dot, length, abs } = require("../3_summonscript");
 
 const resolution = 0.1;
 const region = [300, 300, 300];
 
-const $ = toLibfiveValue;
+const $ = (n) => new Value(n);
 
 const hash = (p) => {
 	const e = $([$(p).dot([127.1, 311.7]), $(p).dot([269.5, 183.3])]);
@@ -35,7 +35,7 @@ const simplex2D = (p) => {
 }
 
 const fbm = (noiseFn) => {
-  const [$X, $Y, $Z] = [X(), Y(), Z()];
+  const [$X, $Y, $Z] = XYZ();
 
   // I think the issue is a combination of coordinate mapping and the noise function.
   // The noise function expects [0,1] coordinate system, but we're in a [-X,X] coordinate system.
@@ -53,6 +53,6 @@ const fbm = (noiseFn) => {
   return $Z.sub($f.mul(1));
 };
 
-const model = () => fbm(simplex2D);
+const model = fbm(simplex2D);
 
-preview(model, [region.mul(-1), region], resolution, resolution);
+Viewer.upload(model, [region.mul(-1), region], resolution, resolution);

@@ -1,7 +1,7 @@
-const { print2d, sphere, box, preview } = require("../index");
+const { print2d, sphere, box, Viewer } = require("../3_summonscript");
 
 // Due to multithreading of libfive, we must do things like this.
-const model = (t) => () => {
+const model = (t) => {
   const wave = Math.sin(t/360 * 2*Math.PI);
 
   const text = print2d("Summon\nScript")
@@ -13,7 +13,7 @@ const model = (t) => () => {
   const cube = box.exact([0.5, 0.5, 0.5])
     .move(ballPosition.add([0.5, 0, 1*wave]));
 
-  return text.union(ball).blend(cube, 0.5)
+  return text.union(ball).unionBlend(cube, 0.5)
 };
 
 const res = 5;
@@ -24,7 +24,7 @@ const boundingBox = [bb.div(-2), bb.div(2)];
 
 // Let's do a little animation
 const fn = (t) => {
-  return preview(model(t), boundingBox, res, res)
+  return Viewer.upload(model(t), boundingBox, res, res)
   .then(() => {
     if (t >= 360) return;
     return fn(t+2);

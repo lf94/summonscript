@@ -1,8 +1,7 @@
 // A playing card, with the dimensions of Magic the Gathering cards.
 // Print with a 0.1mm height!
 
-const { preview } = require("../utils/preview");
-const { box,mm,deg,saveAsSTL,print2d,textFitToArea } = require("../index");
+const { box, mm, deg, print2d, textFitToArea, Viewer } = require("../3_summonscript");
 
 const layout = {
   card: { w: 63.5*mm, l: 88.9*mm, h: 0.4*mm, r: 3.0*mm },
@@ -48,4 +47,4 @@ const card3d = base3d.difference(text3d);
 const result = text3d //.rotateY(180*deg);
 
 const region = [100,100,100];
-preview(() => result, [region.mul(-1), region], 2, 4);
+Viewer.upload(result, [region.mul(-1), region], 2, 4);

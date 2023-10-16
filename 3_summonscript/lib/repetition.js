@@ -1,4 +1,4 @@
-const { length, toLibfiveValue, XYZ, atan2, floor, cos, sin, neg, min } = require("../index");
+const { length, atan2, floor, cos, sin, neg, min, XYZ } = require("./math");
 
 // https://iquilezles.org/articles/sdfrepetition/
 // I am just a code monkey.
@@ -62,4 +62,4 @@ const repeat = {
   }
 };
 
-module.exports = repeat;
+module.exports = { repeat };

@@ -1,7 +1,6 @@
 // Parametric shipping box!
 
-const { preview } = require("../utils/preview");
-const { box, mm, cm, deg } = require("../index.js");
+const { box, mm, cm, deg, Viewer } = require("../3_summonscript");
 
 // Modify the parameters to get a box that fits your needs.
 const dimensions = [5*cm, 5*cm, 5*cm];
@@ -18,7 +17,7 @@ const model = () => {
   const rounding = 0.1;
   const offset = { rounding: 0.5*cm, };
 
-  const base = box.exact(dimensions);
+  const base = box.roundedZ(dimensions, 4);
 
   const bottomCut = box.exact([dimensions[0], dimensions[1], offset.rounding]);
 
@@ -33,7 +32,7 @@ const model = () => {
   // There's lots of divide-by-2 because everything is centered by default.
 
   const topHeight = offset.rounding;
-  const top = box.exact([dimensions[0], dimensions[1], topHeight])
+  const top = box.roundedZ([dimensions[0], dimensions[1], topHeight], 4)
     .move([0, 0, dimensions[2]/2 - topHeight/2]);
 
   const clip = {
@@ -71,4 +70,4 @@ const bb = [
   dimensions.div(2).add(1).add(20)
 ];
 
-preview(model, bb, 0.1, 0.4);
+Viewer.upload(model(), bb, 0.1, 0.4);

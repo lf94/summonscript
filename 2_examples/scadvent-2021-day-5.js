@@ -1,5 +1,4 @@
-const { preview } = require("../utils/preview");
-const { box, sphere, nothing } = require("../index.js");
+const { box, sphere, nothing, Viewer } = require("../3_summonscript");
 
 // Recreate Day 5 of Scadvent 2021
 const tetrominos = [
@@ -21,7 +20,7 @@ const tetrominos = [
    [0,1,1,1]],
 ];
 
-const model = (defs) => () => {
+const model = (defs) => {
   const ts = defs.map((t) => {
     let result = undefined;
     for (let y = 0; y < t.length; y += 1) {
@@ -56,4 +55,4 @@ const r = [
   [tetrominos.length * 5, 10.0, 10.0]
 ];
 
-preview(model(tetrominos), r, 1, 4);
+Viewer.upload(model(tetrominos), r, 1, 4);

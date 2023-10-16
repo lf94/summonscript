@@ -1,6 +1,7 @@
+const { Value } = require("../value");
 const {
-  XYZ, clamp, length, step, toLibfiveValue, sign, nothing, neg, mix, abs, min
-} = require("../index");
+  XYZ, clamp, length, step, sign, nothing, neg, mix, abs, min
+} = require("./math");
 
 const cross2 = (a, b) => a[0].mul(b[1]).sub(a[1].mul(b[0]));
 
@@ -11,19 +12,19 @@ const windingSign = (p, a, b) => {
     .add(step(p.value[1], b.value[1]))
     .add(step(e.value[1].mul(w.value[0]), e.value[0].mul(w.value[1])));
 
-  return toLibfiveValue(1).sub(neg(cond).mul(2).mod(3).mul(cond.mod(3)).sub(1).mod(3));
+  return new Value(1).sub(neg(cond).mul(2).mod(3).mul(cond.mod(3)).sub(1).mod(3));
 };
 
 const sketch = ({ startPoint }) => {
   const [X, Y, Z] = XYZ();
   return {
     currentPoint: startPoint,
-    xy: toLibfiveValue([X.add(0.5),Y.add(0.75)]),
-    value: toLibfiveValue(1e10), // Something to do with accuracy?
-    winding: toLibfiveValue(1.0),
+    xy: new Value([X.add(0.5),Y.add(0.75)]),
+    value: new Value(1e10), // Something to do with accuracy?
+    winding: new Value(1.0),
     line(b_) {
-      const a = toLibfiveValue(this.currentPoint);
-      const b = toLibfiveValue(b_.add(this.currentPoint));
+      const a = new Value(this.currentPoint);
+      const b = new Value(b_.add(this.currentPoint));
 
       const pa = this.xy.sub(a);
       const ba = b.sub(a);
@@ -37,14 +38,14 @@ const sketch = ({ startPoint }) => {
     },
     arc(sc_, ra_) {
       //float sdArc( in vec2 p, in vec2 sc, in float ra, float rb )
-      const sc = toLibfiveValue(sc_);
-      const ra = toLibfiveValue(ra_);
+      const sc = new Value(sc_);
+      const ra = new Value(ra_);
 
       const px = abs(this.xy.value[0]);
       const cond = step(sc.value[0].mul(this.xy.value[1]), sc.value[1].mul(p.x));
 
       const result = cond.mul(length(p.sub(sc.mul(ra)))) // if true
-        .add(toLibfiveValue(1).sub(cond).mul(abs(length(p).sub(ra)))); // else
+        .add(new Value(1).sub(cond).mul(abs(length(p).sub(ra)))); // else
 
       this.value = this.value.union(result);
       return this;
@@ -55,11 +56,7 @@ const sketch = ({ startPoint }) => {
   };
 };
 
-const polar = (length, angle) => {
-  return [Math.cos(angle)*length, Math.sin(angle)*length];
-};
 
 module.exports = {
-  sketch,
-  polar,
+  sketch
 };
