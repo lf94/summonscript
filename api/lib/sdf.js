@@ -1,20 +1,25 @@
 //
 // Implement many many SDF shapes, transformations and common functions.
 // Either taken from libfive_stdlib, or Inigo Iquilez, or some other genius.
-//
 
-const { toLibfiveValue } = require("./builder");
-const { min, max } = require("./math");
+const {
+  libfive_tree_x, libfive_tree_y, libfive_tree_z, libfive_tree_remap
+} = require("../../libfive");
+
+const { toLibfiveValue, fromLibfiveValue } = require("../index");
+const {
+  min, max, length, cos, sin, mix, clamp, Vec2, neg, abs, sqrt
+} = require("./math");
 
 const X = () => toLibfiveValue(libfive_tree_x());
 const Y = () => toLibfiveValue(libfive_tree_y());
 const Z = () => toLibfiveValue(libfive_tree_z());
 const XYZ = () => [X(),Y(),Z()];
 
-module.exports = {
+const _ = {
   union: min,
   intersection: max,
-  difference: (a, b) => intersection(a, neg(b)),
+  difference(a, b) { return _.intersection(a, neg(b)); },
 
   X,
   Y,
@@ -129,9 +134,9 @@ module.exports = {
     return shape.move(neg(base)).remap([x.mul(s), y.mul(s), z]).move(base);
   },
 
-  clearance(a, b, o){ return difference(a, b.offset(o)); },
+  clearance(a, b, o){ return _.difference(a, b.offset(o)); },
 
-  shell(shape, o){ return clearance(shape, shape, neg(abs(o))); },
+  shell(shape, o){ return _.clearance(shape, shape, neg(abs(o))); },
 
   // Remember, a big positive value is "outside"
   nothing() { return toLibfiveValue(10000000); },
@@ -156,11 +161,11 @@ module.exports = {
     },
   },
 
-  ellipsoid(wlh_){
-    const wlh = wlh_.div(2);
+  ellipsoid(wlh){
+    const $wlh = toLibfiveValue(wlh).div(2);
     const [x,y,z] = [X(),Y(),Z()];
-    const k0 = this.length([x.div(wlh[0]), y.div(wlh[1]), z.div(wlh[2])]);
-    const k1 = this.length([x.div(wlh[0]**2), y.div(wlh[1]**2), z.div(wlh[2]**2)]);
+    const k0 = length([x.div($wlh[0]), y.div($wlh[1]), z.div($wlh[2])]);
+    const k1 = length([x.div($wlh[0]**2), y.div($wlh[1]**2), z.div($wlh[2]**2)]);
     return k0.mul(k0.sub(1.0).div(k1));
   },
 
@@ -201,20 +206,20 @@ module.exports = {
 
   cone: {
     capped(h, d1, d2) {
-      const cyl = cylinder(h, d1);
+      const cyl = _.cylinder(h, d1);
       //  taperXYZ(base_, height_, scale_, base_scale_)
       return cyl.taperXYZ([0,0,h/-2], h, d2/d1, 1);
     },
     elongated(h, d1, d2, stretches) {
-      const cyl = cylinder(h, d1);
+      const cyl = _.cylinder(h, d1);
       return cyl
         .elongate(stretches)
         .taperXYZ([0,0,h/-2], h, d2/d1, 1);
     },
     rounded(h, d1, d2) {
       return this.capped(h, d1, d2)
-        .union(sphere(d1/2).move([0, 0, h/-2]))
-        .union(sphere(d2/2).move([0, 0, h/2]));
+        .union(_.sphere(d1/2).move([0, 0, h/-2]))
+        .union(_.sphere(d2/2).move([0, 0, h/2]));
     }
   },
 
@@ -235,36 +240,15 @@ module.exports = {
 
   box: {
     exact(b$) {
-      return rectangle.exact(b$.slice(0, 2))
+      return _.rectangle.exact(b$.slice(0, 2))
         .extrudeZ(b$[2]/-2, b$[2]/2);
     },
     roundedZ(b$, r) {
-      return rectangle
+      return _.rectangle
         .roundedZ(b$.slice(0, 2), r)
         .extrudeZ(b$[2]/-2, b$[2]/2);
     }
   },
-
-  textFitToArea(str_, scale, area){
-    const avgGlyphSize = 0.6*scale; // taken from libfive_stdlib. In the future reimpl the glyphs.
-    let strs = [];
-    let str = "";
-    let x = 0;
-    for (let c of str_) {
-       x += avgGlyphSize;
-       str += c;
-       if (x > area[0] && c === " ") {
-         strs.push(str);
-         str = "";
-         x = 0;
-       }
-    }
-    strs.push(str);
-
-    return strs.join("\n");
-  },
-
-  print2d(str){
-    return toLibfiveValue(text(str, { x: toLibfiveTree(0), y: toLibfiveTree(0) }));
-  },
 };
+
+module.exports = _;

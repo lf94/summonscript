@@ -1,4 +1,4 @@
-import { unary, binary, fromLibfiveValue, toLibfiveValue } from "../builder";
+import { unary, binary, fromLibfiveValue, toLibfiveValue } from "../index";
 
 //
 // Create the functions from the opcodes.
