@@ -1,4 +1,4 @@
-import { unary, binary, fromLibfiveValue, toLibfiveValue } from "../index";
+const { unary, binary, fromLibfiveValue, toLibfiveValue } = require("../index");
 
 //
 // Create the functions from the opcodes.
@@ -13,7 +13,7 @@ const _ = {
   pow: binary("pow"),
 
   neg: unary("neg"),
-  inverse($n) { return this.neg($n); }
+  inverse($n) { return this.neg($n); },
 
   abs: unary("abs"),
 
@@ -32,7 +32,7 @@ const _ = {
   compare: binary("compare"),
 
   // Get the fractional part of a number.
-  fract($n) { return $n.mod(1); }
+  fract($n) { return $n.mod(1); },
 
   // Get the length/magnitude of a vector.
   length($xyz) {
@@ -42,7 +42,7 @@ const _ = {
     const adds = raised.reduce(($acc, $cur) => $acc.add($cur));
     return this.sqrt(adds);
   },
-  mag($xyz) { return this.length($xyz); }
+  mag($xyz) { return this.length($xyz); },
 
   floor(n) { return n.sub(n.mod(1)); },
   round(n) { return this.floor(n.add(0.5)); },

@@ -1,4 +1,4 @@
-const { capsule, cone, cylinder, mm, deg, preview } = require("../index");
+const { preview, capsule, cylinder, cone } = require("../index");
 
 const model = () => {
   const cap1 = capsule(10, 10).elongate([2, 0, 0]);

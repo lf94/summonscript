@@ -1,7 +1,14 @@
-const builder = require("./builder");
-
-// The default API is the builder interface, which implements a builder pattern,
-// for example: sphere(1).scaleX(12).move([1, 0, 0]).
-module.exports = builder;
-
-;
+module.exports = Object.assign(
+  {},
+  require("./api/index"),
+  require("./api/libfive"),
+  require("./api/libfive-stdlib"),
+  require("./api/lib/annotate"),
+  require("./api/lib/math"),
+  require("./api/lib/measurement"),
+  require("./api/lib/preview"),
+  require("./api/lib/shapes"),
+  require("./api/lib/sketch"),
+  require("./api/lib/text"),
+  require("./api/lib/transforms"),
+);
