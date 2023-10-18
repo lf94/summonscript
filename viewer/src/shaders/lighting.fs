@@ -9,6 +9,9 @@ in vec3 fragNormal;
 // Input uniform values
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
+// uniform float alpha;
+uniform float colorOverride;
+uniform vec4 color;
 
 // Output fragment color
 out vec4 finalColor;
@@ -79,4 +82,7 @@ void main()
 
     // Gamma correction
     finalColor = pow(finalColor, vec4(1.0/2.2));
+
+    // finalColor.a = alpha;
+    finalColor = mix(finalColor, color, colorOverride);
 }

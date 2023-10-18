@@ -31,10 +31,11 @@ const State = enum {
   shutdown,
 };
 
-fn u8sToVector3s(slice: []u8) []raylib.Vector3 {
-  var result: []raylib.Vector3 = &[0]raylib.Vector3{};
+// Convert from []S to []T.
+fn convertSlice(comptime S: type, comptime T: type, slice: []S) []T {
+  var result: []T = undefined;
   result.ptr = @alignCast(@ptrCast(slice.ptr));
-  result.len = slice.len / 4 / 3;
+  result.len = slice.len * @bitSizeOf(S) / @bitSizeOf(T);
   return result;
 }
 
@@ -49,7 +50,7 @@ const Mesh = struct {
   raylib: ?raylib.Mesh,
 
   fn initRaylibMesh(self: *@This(), allocator: std.mem.Allocator) !void {
-    const vertices = u8sToVector3s(self.vertices.?.items);
+    const vertices = convertSlice(u8, raylib.Vector3, self.vertices.?.items);
     self.normals = try Mesh.computeNormals(allocator, vertices);
 
     self.raylib = .{
@@ -71,10 +72,10 @@ const Mesh = struct {
     };
   }
 
-  fn deinitRaylibMesh(self: *@This(), allocator: std.mem.Allocator) void {
-    self.vertices.?.deinit();
-    allocator.free(self.normals.?);
-  }
+  // fn deinitRaylibMesh(self: *@This(), allocator: std.mem.Allocator) void {
+  //   self.vertices.?.deinit();
+  //   allocator.free(self.normals.?);
+  // }
 
   fn loadModel(
     self: *@This(),
@@ -120,7 +121,9 @@ const Mesh = struct {
 // This position is based on the fact most 3D printers have a 10cmx10cm bed.
 // So we want to be a little out from there.
 // Due to auto-focusing the initial position doesn't matter much at all.
-pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
+// pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -25.0, .z = 5.0 };
+// pub const CAMERA_INITIAL_POSITION = raylib.Vector3One();
+pub const CAMERA_INITIAL_POSITION = .{ .x = 0.0, .y = -10.0, .z = 0.0 };
 
 inline fn Translate(v: raylib.Vector3) raylib.Matrix {
   return raylib.MatrixTranslate(v.x, v.y, v.z);
@@ -161,6 +164,7 @@ fn Compose(mats: []const raylib.Matrix) raylib.Matrix {
 
 // Ported from raylib/rcamera.h
 fn GetCameraForward(camera: raylib.Camera3D) raylib.Vector3 {
+  // std.debug.print("target, position: {}, {}", .{camera.target, camera.position});
   return raylib.Vector3Normalize(
     raylib.Vector3Subtract(camera.target, camera.position)
   );
@@ -227,7 +231,71 @@ fn setCameraDistance(camera: *raylib.Camera3D, distance: f32) void {
   scaleCamera(camera, distance / raylib.Vector3Length(camera.position));
 }
 
+var camera_autopilot: bool = true;
+
+// Set these to the desired target and positions and the camera
+// autopilot will move to them.
+var camera_final_target: raylib.Vector3 = raylib.Vector3Zero();
+var camera_final_position: raylib.Vector3 = CAMERA_INITIAL_POSITION;
+
+// The camera has variable velocity with fixed acceleration. This
+// gives it a bit of weightiness/realism.
+const camera_acceleration: f32 = 1.0;
+var camera_velocity: f32 = 0.0;
+
+// The camera target (the point it's looking at) has a fixed velocity,
+// so its movement is a bit snappier than the camera itself.
+const camera_target_velocity: f32 = 1.0;
+
+// Both the camera position and target will slow down as they near
+// their destination (once their distance to the destination is within
+// the decel range). Set to 0 to disable this effect.
+const camera_position_decel_range: f32 = 1.0;
+const camera_target_decel_range: f32 = 0.1;
+
 pub fn updateCamera(camera: *raylib.Camera3D) void {
+  if (camera_autopilot and !raylib.IsMouseButtonDown(raylib.MOUSE_BUTTON_LEFT)) {
+    // First we will move the camera position.
+    var displacement = Sub(camera_final_position, camera.position);
+    var distance = raylib.Vector3Length(displacement);
+
+    // Apply acceleration.
+    camera_velocity = (camera_velocity + camera_acceleration * raylib.GetFrameTime());
+
+    // Calculate actual camera velocity for this frame.
+    var scaled_velocity = camera_velocity * raylib.GetFrameTime()
+      * @max(0.1, std.math.pow(f32, (1 - @max(0, camera_position_decel_range - distance)
+                                       / camera_position_decel_range), 2));
+
+    // Snap to final position when close enough.
+    if (distance <= scaled_velocity) {
+      camera.position = camera_final_position;
+      camera_velocity = 0.0;
+    } else {
+      // Else move toward the final position.
+      camera.position = Add(
+        camera.position, raylib.Vector3Scale(raylib.Vector3Normalize(displacement),
+                                             scaled_velocity));
+    }
+
+    // Then we move the camera target.
+    displacement = Sub(camera_final_target, camera.target);
+    distance = raylib.Vector3Length(displacement);
+    scaled_velocity = camera_target_velocity * raylib.GetFrameTime()
+      * @max(0.1, std.math.pow(f32, (1 - @max(0, camera_target_decel_range - distance)
+                                       / camera_target_decel_range), 2));
+
+    // Snap to final position when close enough.
+    if (distance <= scaled_velocity) {
+      camera.target = camera_final_target;
+    } else {
+      // Else move toward the final position.
+      camera.target = Add(
+        camera.target, raylib.Vector3Scale(raylib.Vector3Normalize(displacement),
+                                           scaled_velocity));
+    }
+  }
+  
   const key_pressed = raylib.GetKeyPressed();
   switch (key_pressed) {
     raylib.KEY_SPACE => camera.position = CAMERA_INITIAL_POSITION,
@@ -261,11 +329,11 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   camera.target = raylib.Vector3Add(camera.target, translate);
   slideCamera(camera, translate);
 
-  // Update camera up vector.
-  camera.up = raylib.Vector3Transform(
-    camera.up,
-    Rotate(GetCameraRight(camera.*), rotateY)
-  );
+  // // Update camera up vector.
+  // camera.up = raylib.Vector3Transform(
+  //   camera.up,
+  //   Rotate(GetCameraRight(camera.*), rotateY)
+  // );
 
   // Apply overall transformation.
   camera.position = raylib.Vector3Transform(
@@ -312,6 +380,14 @@ inline fn Vector3Max(a: raylib.Vector3, b: raylib.Vector3) raylib.Vector3 {
 fn boundingBoxUnion(a: raylib.BoundingBox, b: raylib.BoundingBox) raylib.BoundingBox {
   return .{ .min = Vector3Min(a.min, b.min), .max = Vector3Max(a.max, b.max) };
 }
+
+const DELTA_MESH_DURATION: f32 = 1.0;
+const DeltaMesh = struct {
+  duration: f32,
+  t: f32,
+  model: raylib.Model,
+  color: raylib.Color,
+};
 
 // Those lines and text you see on blueprints showing the length or radius
 // of an edge. For now we just support length annotations.
@@ -373,6 +449,9 @@ pub fn main() !void {
   // "Location" is essentially a "pointer reference".
   // Allows for communication between our program and the shader.
   shader.locs[raylib.SHADER_LOC_VECTOR_VIEW] = raylib.GetShaderLocation(shader, "viewPos");
+  // const alphaLoc = raylib.GetShaderLocation(shader, "alpha");
+  const colorOverrideLoc = raylib.GetShaderLocation(shader, "colorOverride");
+  const colorLoc = raylib.GetShaderLocation(shader, "color");
 
   // equiv. to RGBA
   var ambient_value: raylib.Vector4 = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
@@ -382,28 +461,44 @@ pub fn main() !void {
 
   // Assigning the return value would be used for say, rendering a sphere that
   // represents the source of light. We just care about showing a light though.
+  // _ = rlights.CreateLight(
+  //   rlights.LightType.point,
+  //   .{ .x = 100, .y = 0.0, .z = 0.0 },
+  //   raylib.Vector3Zero(),
+  //   raylib.RED, shader
+  // ).?;
+  // _ = rlights.CreateLight(
+  //   rlights.LightType.point,
+  //   .{ .x = 0, .y = -100.0, .z = 0.0 }, // More intuitive in front
+  //   raylib.Vector3Zero(),
+  //   raylib.GREEN, shader
+  // ).?;
+  // _ = rlights.CreateLight(
+  //   rlights.LightType.point,
+  //   .{ .x = 0, .y = 0.0, .z = 100.0 },
+  //   raylib.Vector3Zero(),
+  //   raylib.BLUE, shader
+  // ).?;
+  
+  // _ = rlights.CreateLight(
+  //   rlights.LightType.point,
+  //   .{ .x = 10, .y = -25.0, .z = 100.0 },
+  //   raylib.Vector3Zero(),
+  //   raylib.BLUE, shader
+  // ).?;
+
   _ = rlights.CreateLight(
     rlights.LightType.point,
-    .{ .x = 100, .y = 0.0, .z = 0.0 },
-    raylib.Vector3Zero(),
-    raylib.RED, shader
-  ).?;
-  _ = rlights.CreateLight(
-    rlights.LightType.point,
-    .{ .x = 0, .y = -100.0, .z = 0.0 }, // More intuitive in front
-    raylib.Vector3Zero(),
-    raylib.GREEN, shader
-  ).?;
-  _ = rlights.CreateLight(
-    rlights.LightType.point,
-    .{ .x = 0, .y = 0.0, .z = 100.0 },
+    .{ .x = 25, .y = -25.0, .z = 25.0 },
     raylib.Vector3Zero(),
     raylib.BLUE, shader
   ).?;
 
+
   // 60 is arbitrary. To be honest this could probably be even lower to save
   // on GPU computation.
-  raylib.SetTargetFPS(60);
+  // raylib.SetTargetFPS(60);
+  raylib.SetTargetFPS(144);
 
   var state = State.wait_command;
 
@@ -442,6 +537,8 @@ pub fn main() !void {
   var annotations = std.ArrayList(Annotation).init(std.heap.raw_c_allocator);
   var target_annotation_index: u32 = 0;
 
+  var delta_meshes = std.ArrayList(DeltaMesh).init(std.heap.raw_c_allocator);
+
   var server = std.net.StreamServer.init(.{});
   defer server.deinit();
 
@@ -469,8 +566,6 @@ pub fn main() !void {
       if (vertices_delta_first_render_insertions) |vertices| {
         if (vertices.len < 3) break :out; // Nothing to really center on.
 
-        std.debug.print("\n{any}\n", .{vertices_delta_first_render_deletions});
-
         var bb = boundingBoxOfVertices(vertices);
         if (vertices_delta_first_render_deletions.?.len > 3) {
           bb = boundingBoxUnion(
@@ -478,20 +573,50 @@ pub fn main() !void {
         }
         const center = raylib.Vector3Lerp(bb.min, bb.max, 0.5);
         const dist = raylib.Vector3Distance(center, bb.max);
-        camera.position = raylib.Vector3Add(
+        // camera.position = raylib.Vector3Add(
+        //   raylib.Vector3Scale(
+        //     Neg(GetCameraForward(camera)),
+        //     dist * 1.33 // 1.33 is an arbitrary scale. It just looks nice.
+        //   ),
+        //   center
+        // );
+        // camera.target = center;
+        camera_final_position = raylib.Vector3Add(
           raylib.Vector3Scale(
-            Neg(GetCameraForward(camera)),
-            dist * 1.33 // 1.33 is an arbitrary scale. It just looks nice.
+            // Neg(GetCameraForward(camera)),
+            raylib.Vector3Normalize(Sub(camera_final_position, camera_final_target)),
+            dist * 2.0 // 1.33 is an arbitrary scale. It just looks nice.
           ),
           center
         );
-        camera.target = center;
+        camera_final_target = center;
         focused = true;
       }
     }
 
     // Look here for input handling also.
     updateCamera(&camera);
+
+    // Update delta meshes.
+    var i: usize = 0;
+    while (i < delta_meshes.items.len) {
+      var m: *DeltaMesh = &delta_meshes.items[i];
+      m.t += raylib.GetFrameTime();
+      if (m.t >= m.duration) {
+        raylib.UnloadModel(m.model);
+        _ = delta_meshes.orderedRemove(i);
+      } else {
+        // m.model.materials[0].maps[raylib.MATERIAL_MAP_DIFFUSE].color.a =
+        //   @intFromFloat(1.0 - (m.t / m.duration));
+        // m.model.materials[0].maps[raylib.MATERIAL_MAP_SPECULAR].color.a =
+        //   @intFromFloat(1.0 - (m.t / m.duration));
+        m.color.a = @intFromFloat((1.0 - (m.t / m.duration)) * 255.0 / 3.0);
+        // std.debug.print("t, duration, alpha: {}, {}, {}\n", .{m.t, m.duration, m.color.a});
+        i += 1;
+      }
+    }
+
+    // std.debug.print("# of delta meshes: {}\n", .{delta_meshes.items.len});
     
     raylib.SetShaderValue(
       shader,
@@ -501,7 +626,8 @@ pub fn main() !void {
     );
 
     raylib.BeginDrawing();
-    raylib.ClearBackground(raylib.WHITE);
+    // raylib.ClearBackground(raylib.WHITE);
+    raylib.ClearBackground(raylib.GRAY);
     
     raylib.BeginMode3D(camera);
 
@@ -513,6 +639,24 @@ pub fn main() !void {
     // adding a lot of raylib code.
     for (annotations.items) |annotation| {
       raylib.DrawLine3D(annotation.line.start, annotation.line.end, raylib.BLACK);
+    }
+
+    // Draw delta meshes.
+    for (delta_meshes.items) |m| {
+      // std.debug.print("drawing delta mesh {}\n", .{m});
+      // raylib.SetShaderValue(
+      //   shader, alphaLoc, &@as(f32, 1.0 - m.t / m.duration), raylib.SHADER_UNIFORM_FLOAT);
+      raylib.SetShaderValue(
+        shader, colorOverrideLoc, &@as(f32, 1.0), raylib.SHADER_UNIFORM_FLOAT);
+      const color: raylib.Vector4 = .{.x = @as(f32, @floatFromInt(m.color.r))/255.0,
+                                      .y = @as(f32, @floatFromInt(m.color.g))/255.0, 
+                                      .z = @as(f32, @floatFromInt(m.color.b))/255.0,
+                                      .w = @as(f32, @floatFromInt(m.color.a))/255.0};
+      raylib.SetShaderValue(shader, colorLoc, &color, raylib.SHADER_UNIFORM_VEC4);
+      raylib.DrawModel(m.model, .{ .x = 0, .y = 0, .z = 0 }, 1, m.color);
+      // raylib.SetShaderValue(shader, alphaLoc, &@as(f32, 1.0), raylib.SHADER_UNIFORM_FLOAT);
+      raylib.SetShaderValue(
+        shader, colorOverrideLoc, &@as(f32, 0.0), raylib.SHADER_UNIFORM_FLOAT);
     }
     
     raylib.EndMode3D();
@@ -545,31 +689,31 @@ pub fn main() !void {
             Command.quit => .shutdown,
           };
 
-          try stdout.print("Acknowledging command\n", .{});
+          // try stdout.print("Acknowledging command\n", .{});
 
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_mesh_id => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.id_bytes);
           mesh.id = std.mem.bytesToValue(u32, &buffers.id_bytes);
-          try stdout.print("read_id -> read_iteration\n", .{});
+          // try stdout.print("read_id -> read_iteration\n", .{});
           state = .read_iteration;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_iteration => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.iteration_byte);
           mesh.iteration = buffers.iteration_byte[0];
-          try stdout.print("Iteration: {}\n", .{ mesh.iteration });
+          // try stdout.print("Iteration: {}\n", .{ mesh.iteration });
 
-          try stdout.print("read_iteration -> read_vertex_count\n", .{});
+          // try stdout.print("read_iteration -> read_vertex_count\n", .{});
           state = .read_vertex_count;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
         .read_vertex_count => {
           _ = try connection_maybe.?.stream.reader().read(&buffers.vertex_count);
           mesh.vertexCount = std.mem.bytesToValue(i32, &buffers.vertex_count);
-          try stdout.print("Vertex count: {}\n", .{mesh.vertexCount});
-          try stdout.print("read_vertex_count -> read_vertices transition\n", .{});
+          // try stdout.print("Vertex count: {}\n", .{mesh.vertexCount});
+          // try stdout.print("read_vertex_count -> read_vertices transition\n", .{});
           mesh.vertices = std.ArrayList(u8).init(std.heap.raw_c_allocator);
           state = .read_vertices;
           _ = try connection_maybe.?.stream.write(&.{1});
@@ -583,7 +727,7 @@ pub fn main() !void {
           try mesh.vertices.?.appendSlice(buffers.xyz_coords[0..bytes_read]);
           if ((mesh.vertices.?.items.len / 4 / 3) != mesh.vertexCount) continue;
           
-          try stdout.print("read_vertices -> load_model transition\n", .{});
+          // try stdout.print("read_vertices -> load_model transition\n", .{});
           state = .load_model;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
@@ -602,18 +746,61 @@ pub fn main() !void {
           // If we're on the first iteration, calculate and focus on changes
           if (mesh.iteration == 0) {
             focused = false;
-            const vertices = u8sToVector3s(mesh.vertices.?.items);
+            const vertices = convertSlice(u8, raylib.Vector3, mesh.vertices.?.items);
             const new_tris = try mkSet(Tri, TriContext, std.heap.raw_c_allocator,
-                                       Vector3sToTris(vertices));
+                                       convertSlice(raylib.Vector3, Tri, vertices));
             const dif = try diff(Tri, TriContext, std.heap.raw_c_allocator, old_tris, new_tris);
-            vertices_delta_first_render_insertions = TrisToVector3s(dif.insertions);
-            vertices_delta_first_render_deletions = TrisToVector3s(dif.deletions);
+            vertices_delta_first_render_insertions =
+              convertSlice(Tri, raylib.Vector3, dif.insertions);
+            vertices_delta_first_render_deletions =
+              convertSlice(Tri, raylib.Vector3, dif.deletions);
             old_tris.deinit();
             old_tris = new_tris;
+
+            // // Create delta meshes.
+            // if (vertices_delta_first_render_insertions) |insertions| {
+            //   if (insertions.len > 0) {
+            //     var insertions_mesh: Mesh = .{
+            //       .vertexCount = @intCast(insertions.len),
+            //       .triangleCount = 0,
+            //       .vertices = std.ArrayList(u8).fromOwnedSlice(
+            //         std.heap.raw_c_allocator, convertSlice(raylib.Vector3, u8, insertions)),
+            //       .normals = null,
+            //       .raylib = null,
+            //     };
+            //     var dm: DeltaMesh = .{
+            //       .duration = DELTA_MESH_DURATION,
+            //       .t = 0.0,
+            //       .model = try insertions_mesh.loadModel(std.heap.raw_c_allocator, shader),
+            //       .color = raylib.WHITE,
+            //     };
+            //     try delta_meshes.append(dm);
+            //   }
+            // }
+
+            // if (vertices_delta_first_render_deletions) |deletions| {
+            //   if (deletions.len > 0) {
+            //     var deletions_mesh: Mesh = .{
+            //       .vertexCount = @intCast(deletions.len),
+            //       .triangleCount = 0,
+            //       .vertices = std.ArrayList(u8).fromOwnedSlice(
+            //         std.heap.raw_c_allocator, convertSlice(raylib.Vector3, u8, deletions)),
+            //       .normals = null,
+            //       .raylib = null,
+            //     };
+            //     try delta_meshes.append(.{
+            //       .duration = DELTA_MESH_DURATION,
+            //       .t = 0.0,
+            //       .model = try deletions_mesh.loadModel(std.heap.raw_c_allocator, shader),
+            //       .color = raylib.BLACK,
+            //     });
+            //   }
+            // }
+            
           }
 
           state = .wait_command;
-          try stdout.print("load_model -> wait_command transition\n", .{});
+          // try stdout.print("load_model -> wait_command transition\n", .{});
           _ = try connection_maybe.?.stream.write(&.{1});
           connection_maybe.?.stream.close();
           connection_maybe = null;
@@ -637,11 +824,11 @@ pub fn main() !void {
             _ = try connection_maybe.?.stream.write(&.{0});
             state = .wait_command;
           } else {
-            try stdout.print("Appending new annotation {}\n", .{ id });
+            // try stdout.print("Appending new annotation {}\n", .{ id });
             try annotations.append(Annotation { .id = id });
 
             target_annotation_index = @intCast(annotations.items.len - 1);
-            try stdout.print("index {}\n", .{ target_annotation_index });
+            // try stdout.print("index {}\n", .{ target_annotation_index });
 
             _ = try connection_maybe.?.stream.write(&.{1});
             state = .read_annotation_line_start_end;
@@ -665,7 +852,7 @@ pub fn main() !void {
             }
           };
 
-          try stdout.print("read_annotation_line_start_end -> read_annotation_text\n", .{});
+          // try stdout.print("read_annotation_line_start_end -> read_annotation_text\n", .{});
           state = .read_annotation_text;
           _ = try connection_maybe.?.stream.write(&.{1});
         },
@@ -678,7 +865,7 @@ pub fn main() !void {
           std.mem.copy(u8, text, buffers.text[0..bytes_read]);
           annotation.text = text;
 
-          try stdout.print("read_annotation_text -> wait_command \n", .{});
+          // try stdout.print("read_annotation_text -> wait_command \n", .{});
           state = .wait_command;
           _ = try connection_maybe.?.stream.write(&.{1});
           connection_maybe.?.stream.close();
@@ -721,25 +908,25 @@ const Tri = struct {
   }
 };
 
-fn Vector3sToTris(slice: []raylib.Vector3) []Tri {
-  var result: []Tri = undefined;
-  result.ptr = @alignCast(@ptrCast(slice.ptr));
-  result.len = slice.len / 3;
-  return result;
-}
+// fn Vector3sToTris(slice: []raylib.Vector3) []Tri {
+//   var result: []Tri = undefined;
+//   result.ptr = @alignCast(@ptrCast(slice.ptr));
+//   result.len = slice.len / 3;
+//   return result;
+// }
 
-fn TrisToVector3s(slice: []Tri) []raylib.Vector3 {
-  var result: []raylib.Vector3 = undefined;
-  result.ptr = @alignCast(@ptrCast(slice.ptr));
-  result.len = slice.len * 3;
-  return result;
-}
+// fn TrisToVector3s(slice: []Tri) []raylib.Vector3 {
+//   var result: []raylib.Vector3 = undefined;
+//   result.ptr = @alignCast(@ptrCast(slice.ptr));
+//   result.len = slice.len * 3;
+//   return result;
+// }
 
 // View Tri as slice of bytes.
 fn TriTou8s(tri: *const Tri) []const u8 {
   var result: []const u8 = undefined;
   result.ptr = @ptrCast(tri);
-  result.len = 3 * 4;
+  result.len = 3 * 3 * 4;
   return result;
 }
 
