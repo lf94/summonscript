@@ -60,4 +60,4 @@ const spur = gear.extrudeZ(0, 0.5);
 //   .twist(1);
 
 const bb = [20, 20, 20];
-Viewer.upload(helical, [bb.mul(-1), bb], 10, 40);
+Viewer.upload(spur, [bb.mul(-1), bb], 10, 40);
