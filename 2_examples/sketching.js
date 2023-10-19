@@ -1,17 +1,18 @@
 // Demonstrate how to use utils/sketch.js
 
-const { box, cylinder, deg, mm, Viewer, sketch, polar } = require("../3_summonscript");
+const { box, circle, cylinder, deg, mm, Viewer, sketch, polar } = require("../3_summonscript");
 
 const model = () => {
   return sketch({ startPoint: [0, 0] })
-    .line(polar(5*mm, 60*deg))
-    .line(polar(5*mm, -60*deg))
-    .line(polar(5*mm, -180*deg))
+    .arc([1, 2], 0.5)
+    .line([2, 0])
+    .line([0, -2])
+    .line([-2, 0])
     .done()
-    .extrudeZ(0, 5*mm);
+    .extrudeZ(0, 1*mm);
 };
 
-const region = [50*mm, 50*mm, 50*mm];
+const region = [10*mm, 10*mm, 10*mm];
 
-Viewer.upload(model(), [region.mul(-1).add(-0.5), region.add(0.5)], 0.1, 0.4);
+Viewer.upload(model(), [region.mul(-1).add(-1), region.add(1)], 1, 10);
 

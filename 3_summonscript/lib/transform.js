@@ -4,9 +4,7 @@ const { Value } = require("../value");
 const { abs, min, max, neg, sqrt, XYZ, cos, sin } = require("./math");
 
 const remap = ($shape, $xyz)  => {
-  console.log("hi", $xyz);
   const xyz = Value.unwrap($xyz);
-  console.log("ok", xyz);
   return new Value(libfive_tree_remap(
     Value.unwrap($shape),
     toLibfiveTreeConst(xyz[0]),
@@ -125,10 +123,23 @@ const taperXYAlongZ = ($shape, $base, $height, $scale, $baseScale) => {
 
   const s = $height_.div($scale_.mul(z).add($baseScale_.mul($height_.sub(z))));
   const sm = $shape.move(neg($base));
-  console.log(1, sm);
   return sm.remap([x.mul(s), y.mul(s), z]).move($base);
 };
 exports.taperXYAlongZ = taperXYAlongZ;
+
+const twist = ($shape, $amount) => {
+  const $amount_ = new Value($amount);
+  const [x,y,z] = XYZ();
+  const c = cos($amount_.mul(y));
+  const s = sin($amount_.mul(y));
+  const q = [
+    c.mul(x).add(neg(s).mul(z)),
+    s.mul(x).add(c.mul(z)),
+    y
+  ];
+  return $shape.remap(q);
+};
+exports.twist = twist;
 
 const clearance = ($a, $b, $o) => $a.difference($b.offset($o));
 exports.clearance = clearance;
