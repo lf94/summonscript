@@ -31,10 +31,11 @@ const State = enum {
   shutdown,
 };
 
-fn u8sToVector3s(slice: []u8) []raylib.Vector3 {
-  var result: []raylib.Vector3 = &[0]raylib.Vector3{};
+// Convert from []S to []T.
+fn convertSlice(comptime S: type, comptime T: type, slice: []S) []T {
+  var result: []T = undefined;
   result.ptr = @alignCast(@ptrCast(slice.ptr));
-  result.len = slice.len / 4 / 3;
+  result.len = slice.len * @sizeOf(S) / @sizeOf(T);
   return result;
 }
 
@@ -49,7 +50,7 @@ const Mesh = struct {
   raylib: ?raylib.Mesh,
 
   fn initRaylibMesh(self: *@This(), allocator: std.mem.Allocator) !void {
-    const vertices = u8sToVector3s(self.vertices.?.items);
+    const vertices = convertSlice(u8, raylib.Vector3, self.vertices.?.items);
     self.normals = try Mesh.computeNormals(allocator, vertices);
 
     self.raylib = .{
@@ -231,6 +232,9 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   const key_pressed = raylib.GetKeyPressed();
   switch (key_pressed) {
     raylib.KEY_SPACE => camera.position = CAMERA_INITIAL_POSITION,
+    // NOTE (rask): might want to change camera up vector here also
+    // (the camera kinda glitches out when it's set to face the exact
+    // opposite direction of its up vector.
     raylib.KEY_ONE => camera.position = .{ .x = 0.0, .y = 0.0, .z = 25.0 },
     raylib.KEY_TWO => camera.position = .{ .x = 0.0, .y = 0.0, .z = -25.0 },
     raylib.KEY_THREE => camera.position = .{ .x = -25.0, .y = 0.0, .z = 0.0 },
@@ -261,11 +265,13 @@ pub fn updateCamera(camera: *raylib.Camera3D) void {
   camera.target = raylib.Vector3Add(camera.target, translate);
   slideCamera(camera, translate);
 
+  // NOTE (rask): probably better to change camera up vector
+  // independently of mouse rotation.
   // Update camera up vector.
-  camera.up = raylib.Vector3Transform(
-    camera.up,
-    Rotate(GetCameraRight(camera.*), rotateY)
-  );
+  // camera.up = raylib.Vector3Transform(
+  //   camera.up,
+  //   Rotate(GetCameraRight(camera.*), rotateY)
+  // );
 
   // Apply overall transformation.
   camera.position = raylib.Vector3Transform(
@@ -600,12 +606,14 @@ pub fn main() !void {
           // If we're on the first iteration, calculate and focus on changes
           if (mesh.iteration == 0) {
             focused = false;
-            const vertices = u8sToVector3s(mesh.vertices.?.items);
+            const vertices = convertSlice(u8, raylib.Vector3, mesh.vertices.?.items);
             const new_tris = try mkSet(Tri, TriContext, std.heap.raw_c_allocator,
-                                       Vector3sToTris(vertices));
+                                       convertSlice(raylib.Vector3, Tri, vertices));
             const dif = try diff(Tri, TriContext, std.heap.raw_c_allocator, old_tris, new_tris);
-            vertices_delta_first_render_insertions = TrisToVector3s(dif.insertions);
-            vertices_delta_first_render_deletions = TrisToVector3s(dif.deletions);
+            vertices_delta_first_render_insertions =
+              convertSlice(Tri, raylib.Vector3, dif.insertions);
+            vertices_delta_first_render_deletions =
+              convertSlice(Tri, raylib.Vector3, dif.deletions);
             old_tris.deinit();
             old_tris = new_tris;
           }
@@ -718,20 +726,6 @@ const Tri = struct {
       + raylib.Vector3Equals(self.c, other.c) == 3;
   }
 };
-
-fn Vector3sToTris(slice: []raylib.Vector3) []Tri {
-  var result: []Tri = undefined;
-  result.ptr = @alignCast(@ptrCast(slice.ptr));
-  result.len = slice.len / 3;
-  return result;
-}
-
-fn TrisToVector3s(slice: []Tri) []raylib.Vector3 {
-  var result: []raylib.Vector3 = undefined;
-  result.ptr = @alignCast(@ptrCast(slice.ptr));
-  result.len = slice.len * 3;
-  return result;
-}
 
 // View Tri as slice of bytes.
 fn TriTou8s(tri: *const Tri) []const u8 {
