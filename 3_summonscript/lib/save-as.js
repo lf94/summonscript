@@ -1,4 +1,4 @@
-const { libfive_tree_save_mesh, libfive_tree_save_slice } = require("../libfive");
+const { libfive_tree_save_mesh, libfive_tree_save_slice } = require("../ffi-napi/libfive");
 const { toAlignedRegion3, Region2 } = require("./math");
 
 const stl = ({ value }, region, resolution, filepath) => {

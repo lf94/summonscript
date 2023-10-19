@@ -51,13 +51,11 @@ const teeth = repeat.radial(tooth, cells);
 const gear = teeth.unionSmooth(circle(d1), 0.05);
 
 const spur = gear.extrudeZ(0, 0.5);
-
-// Not working because of multi-threading FFI issues
-// const bevel = gear.extrudeZ(0, 0.5).taperXYAlongZ([0, 0, -0.5], 1.0, 2, 1);
-// const helical = gear.extrudeZ(0, 0.5).twist(1);
-// const miter = gear.extrudeZ(0, 0.5)
-//   .taperXYAlongZ([0, 0, -0.5], 1.0, 2, 1)
-//   .twist(1);
+const bevel = gear.extrudeZ(0, 0.5).taperXYAlongZ([0, 0, -0.5], 1.0, 2, 1);
+const helical = gear.extrudeZ(0, 0.5).twist(1);
+const miter = gear.extrudeZ(0, 0.5)
+  .taperXYAlongZ([0, 0, -0.5], 1.0, 2, 1)
+  .twist(1);
 
 const bb = [20, 20, 20];
-Viewer.upload(spur, [bb.mul(-1), bb], 10, 40);
+Viewer.upload(bevel, [bb.mul(-1), bb], 10, 40);

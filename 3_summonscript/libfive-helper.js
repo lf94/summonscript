@@ -3,7 +3,7 @@ const {
   libfive_tree_save_mesh, libfive_tree_save_slice,
   libfive_opcode_enum, libfive_tree_unary, libfive_tree_binary, libfive_tree_const,
   libfive_tree_x, libfive_tree_y, libfive_tree_z
-} = require("./libfive");
+} = require("./ffi-napi/libfive");
 
 const toLibfiveTreeConst = (a) => typeof a === "number" ? libfive_tree_const(a) : a;
 exports.toLibfiveTreeConst = toLibfiveTreeConst;

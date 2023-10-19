@@ -1,7 +1,7 @@
 const net = require("node:net");
 
 const koffi = require("koffi");
-const { libfive_mesh_delete, libfive_tree_render_mesh } = require("../libfive");
+const { libfive_mesh_delete, libfive_tree_render_mesh } = require("../ffi-napi/libfive");
 const { Region3 } = require("./math");
 
 const Viewer = {

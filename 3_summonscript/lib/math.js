@@ -1,4 +1,4 @@
-const { libfive_tree_x, libfive_tree_y, libfive_tree_z  } = require("../libfive");
+const { libfive_tree_x, libfive_tree_y, libfive_tree_z  } = require("../ffi-napi/libfive");
 const { toUnaryOp, toBinaryOp } = require("../libfive-helper");
 const { Value } = require("../value");
 
