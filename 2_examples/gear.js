@@ -52,8 +52,8 @@ const teeth = repeatRadial(tooth, cells);
 const gear = teeth.unionSmooth(circle(d1), 0.05);
 
 const spur = gear.extrudeZ(0, 0.5);
-const bevel = gear.extrudeZ(0, 0.5).taperXYAlongZ([0, 0, 0], 1.0, 0.5, 1);
-const helical = gear.extrudeZ(0, 0.5).twist(1);
+const bevel = spur.taperXYAlongZ([0, 0, 0], 1.0, 0.5, 1);
+const helical = spur.twist(1);
 const miter = bevel.twist(1);
 
 const bb = [20, 20, 20];
