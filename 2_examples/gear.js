@@ -1,5 +1,6 @@
 const {
-  deg, intersectionLineCircle, threePointArc, circle, Viewer, repeat
+  deg, intersectionLineCircle, threePointArc, circle, Viewer, repeatRadial,
+  distributeRadial
 } = require("../3_summonscript");
 
 // This was pain.
@@ -25,7 +26,7 @@ const i1 = intersectionLineCircle(0*deg, l3, d1/2)[0];
 const a1 = Math.atan2(i1[1], i1[0]) * 2;
 
 const cells = 18;
-const spacing = ((Math.PI*2) - (a1*cells)) / cells;
+const spacing = distributeRadial(a1, cells);
 const q1Cells = cells / 4;
 const a1s = q1Cells*a1;
 const spacings = Math.floor(q1Cells)*spacing;
@@ -46,16 +47,14 @@ const tooth = circle(r*2).move([xy[0],  xy[1], 0])
   .difference(circle(d1))
   .intersection(circle(d3));
 
-const teeth = repeat.radial(tooth, cells);
+const teeth = repeatRadial(tooth, cells);
 
 const gear = teeth.unionSmooth(circle(d1), 0.05);
 
 const spur = gear.extrudeZ(0, 0.5);
-const bevel = gear.extrudeZ(0, 0.5).taperXYAlongZ([0, 0, -0.5], 1.0, 2, 1);
+const bevel = gear.extrudeZ(0, 0.5).taperXYAlongZ([0, 0, 0], 1.0, 0.5, 1);
 const helical = gear.extrudeZ(0, 0.5).twist(1);
-const miter = gear.extrudeZ(0, 0.5)
-  .taperXYAlongZ([0, 0, -0.5], 1.0, 2, 1)
-  .twist(1);
+const miter = bevel.twist(1);
 
 const bb = [20, 20, 20];
-Viewer.upload(bevel, [bb.mul(-1), bb], 10, 40);
+Viewer.upload(miter, [bb.mul(-1), bb], 10, 30);

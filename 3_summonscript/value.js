@@ -1,4 +1,4 @@
-const { libfive_tree_print, libfive_tree_remap } = require("./ffi-napi/libfive");
+const { libfive_tree_print, libfive_tree_remap } = require("./koffi/libfive");
 
 class Value {
   constructor(value) {

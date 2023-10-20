@@ -1,6 +1,6 @@
 // Unfortunately this one is complex.
 // We can eventually provide our own implementation.
-const { text } = require("../ffi-napi/libfive-stdlib");
+const { text } = require("../koffi/libfive-stdlib");
 const { toLibfiveTreeConst } = require("../libfive-helper");
 const { Value } = require("../value");
 

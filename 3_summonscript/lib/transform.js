@@ -1,4 +1,4 @@
-const { libfive_tree_remap, libfive_tree_x, libfive_tree_y, libfive_tree_z }  = require("../ffi-napi/libfive");
+const { libfive_tree_remap, libfive_tree_x, libfive_tree_y, libfive_tree_z }  = require("../koffi/libfive");
 const { toLibfiveTreeConst }  = require("../libfive-helper");
 const { Value } = require("../value");
 const { abs, min, max, neg, sqrt, XYZ, cos, sin } = require("./math");

@@ -62,3 +62,6 @@ const threePointArc = (p1, p2, p3) => {
 };
 exports.threePointArc = threePointArc;
 
+// Returns the spacing necessary between cells
+const distributeRadial = (angle, cells) => ((Math.PI*2) - (angle*cells)) / cells;
+exports.distributeRadial = distributeRadial;

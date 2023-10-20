@@ -9,4 +9,5 @@ module.exports = Object.assign(
   require("./lib/measurement"),
   require("./lib/sketch"),
   require("./lib/viewer"),
+  require("./lib/save-as"),
 );
