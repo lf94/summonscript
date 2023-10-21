@@ -8,12 +8,13 @@
 
 ## Features
 
-* Use code to describe models
-* Streaming mesh viewer for a tight feedback loop
+* Use code (JavaScript) to describe models
 * Compatible with any text editor
-* Small technology stack
+* Streaming mesh viewer for a tight feedback loop
 * Forever non-breaking version changes
+* Small technology stack
 * Has a fun theme around magic :D
+* Can possibly make you feel like a young programmer again? :ooo
 
 ## Demo
 
@@ -21,12 +22,17 @@
 
 ## Installation
 
-You'll need four things: NodeJS 0.19, Zig 0.11, raylib and libfive.
+You'll need to gather four ingredients: NodeJS 0.19, Zig 0.11, raylib and libfive.
 
 Honestly the versions of these shouldn't matter *too* much.
 
 I suggest searching how to install all of these, as their instructions could
-change at any time, or could be easier for your platform.
+change at any time, or could be easier for your platform of choice.
+
+I apologize I don't follow the defacto expectation of binaries being available.
+I have reasons for this but they aren't important to mention here.
+
+---
 
 After installing those, run `npm install` so it can install koffi, the FFI
 binding package. (Imagine that, a single JS dependency for this project :)
@@ -34,25 +40,44 @@ binding package. (Imagine that, a single JS dependency for this project :)
 Finally, go into `viewer/` and build it with `zig build`. The binary is output
 to `zig-out/` so feel free to install it anywhere.
 
-You're done.
+You have completed the first leg of your journey.
 
 ## Usage
 
-You're going to want to start the viewer first so it's listening for mesh data.
+You're going to want to start the viewer first so you can see something.
 
-Look at `examples/` and maybe run a couple. They're all JavaScript, so you simply
-do `node examples/something.js`!
+The default view is just a white window.
 
-And that's literally all to it. How you want to setup the rest of your environment
-is completely up to you. For example, in my editor, I type `:cad` and it starts
-the viewer and opens a new file. On save, it runs the script so the viewer updates.
+Head on over to 1_tutorial/. Then check out 2_examples/ and maybe run a couple.
+
+To run anything, you run it like an ordinary JavaScript file: `node file.js`
+
+And that's literally all to it.
+
+How you want to setup the rest of your environment is completely up to you.
+For example, in my editor, I type `:cad` and it starts the viewer and opens a
+new file. On save, it runs the script so the viewer updates. On quit it'll close
+the viewer too.
+
+## Calling all math wizards and math witches
+
+I need your help. SDFs are a difficult subject for me. In particular, it is
+difficult to create SDF code for sketching. At the least we need to be able
+to combine lines, arcs, and beziers. I will help you in any way I can with the
+system, but the actual math is out of my reach. Thank you for reading my plea.
+
+Of course, if you come up with any other SDFs to add to SummonScript I would
+love to merge them in. You will see my threshold for merging is very liberal.
+I care most of all that code CAD is successful, and I need all the help I can
+get my hands on.
 
 ## Background
 
 This system falls into the realm of [code CAD](https://learn.cadhub.xyz/blog/curated-code-cad/).
 
 Why another code CAD system? Simple, because systems like OpenSCAD, Cadquery, replicad,
-and basically everything else cannot describe or handle complex models.
+and basically everything else cannot describe or handle complex models without
+bringing your computer to its knees.
 
 How am I able to offer something better? By sitting on the shoulder's of giants.
 
@@ -71,11 +96,24 @@ that uses a UNIX socket to read mesh data from SummonScripts. It's very small an
 will continue to be. Any other code CAD systems are free to use this as well. It
 remains quick even on complex models because it uses progressive rendering.
 
+## I am looking for businesses who want to try code CAD!
+
+As a testament to code CAD, I would absolutely love to put code CAD to real
+work. I'm looking for anyone in particular that would have designed something
+with traditional CAD, but is willing to put some faith into code CAD.
+
+I will do an evaluation on how much work it would take and what it would cost.
+
+I will also consult fellow code CAD enthusiasts.
+
+Your final CAD product will be put on display here as a seminal case study in
+the strengths and weaknesses of code CAD.
+
 ## Thanks
 
 I would like to first thank those individuals who have created amazing technology
 that is completely free. In particular this is a shoutout to mkeeter (libfive),
-Koromix (koffi), raysan5 (raylib), the whole Zig team, the V8 team, and
+Koromix (koffi), raysan5 (raylib), the  Zig team, the V8 team, and
 Inigo Quilez (SDFs). Without any one of these people, this project would
 probably not exist.
 
