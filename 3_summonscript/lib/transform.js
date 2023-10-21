@@ -47,6 +47,12 @@ const scaleZ = ($shape, $a) => {
 };
 exports.scaleZ = scaleZ;
 
+const scaleXYZ = ($shape, $xyz) => {
+  const [x,y,z] = XYZ();
+  return $shape.remap([x.div($xyz[0]), y.div($xyz[1]), z.div($xyz[2])]);
+};
+exports.scaleXYZ = scaleXYZ;
+
 const rotateX = ($shape, $angle, $center = [0, 0, 0]) => {
   const [x,y,z] = XYZ();
 

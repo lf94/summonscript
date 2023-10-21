@@ -111,3 +111,9 @@ const box = {
 const cube = box;
 exports.box = box;
 exports.cube = cube;
+
+const gyroid = () => { 
+  const [x, y, z] = XYZ();
+  return cos(x).mul(sin(y)).add(cos(y).mul(sin(z))).add(cos(z).mul(sin(x)));
+};
+exports.gyroid = gyroid;

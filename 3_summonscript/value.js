@@ -35,6 +35,7 @@ class Value {
   scaleX($s) { return scaleX(this, $s); }
   scaleY($s) { return scaleY(this, $s); }
   scaleZ($s) { return scaleZ(this, $s); }
+  scaleXYZ($xyz) { return scaleXYZ(this, $xyz); }
   rotateX($angle, $center) { return rotateX(this, $angle, $center); }
   rotateY($angle, $center) { return rotateY(this, $angle, $center); }
   rotateZ($angle, $center) { return rotateZ(this, $angle, $center); }
@@ -94,6 +95,7 @@ const {
   scaleX,
   scaleY,
   scaleZ,
+  scaleXYZ,
   rotateX,
   rotateY,
   rotateZ,
