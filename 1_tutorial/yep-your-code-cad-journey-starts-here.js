@@ -97,5 +97,5 @@ const fn = (t) => {
 
 // At this point, explore the project and find what functions may trigger
 // some ideas. Put them together. Play. Ask questions. Join us.
-// irc.libera.net #summonscript 
+// irc.libera.chat #summonscript 
 // We look forward to your spells :)

@@ -59,6 +59,13 @@ For example, in my editor, I type `:cad` and it starts the viewer and opens a
 new file. On save, it runs the script so the viewer updates. On quit it'll close
 the viewer too.
 
+## Community
+
+Use GitHub Issues for basically everything.
+
+If you want more personal communication, come see us in
+[irc.libera.chat #summonscript](https://web.libera.chat/).
+
 ## Calling all math wizards and math witches
 
 I need your help. SDFs are a difficult subject for me. In particular, it is
