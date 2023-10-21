@@ -37,7 +37,7 @@ I have reasons for this but they aren't important to mention here.
 After installing those, run `npm install` so it can install koffi, the FFI
 binding package. (Imagine that, a single JS dependency for this project :)
 
-Finally, go into `viewer/` and build it with `zig build`. The binary is output
+Finally, go into `4_viewer/` and build it with `zig build`. The binary is output
 to `zig-out/` so feel free to install it anywhere.
 
 You have completed the first leg of your journey.
@@ -48,7 +48,7 @@ You're going to want to start the viewer first so you can see something.
 
 The default view is just a white window.
 
-Head on over to 1_tutorial/. Then check out 2_examples/ and maybe run a couple.
+Head on over to `1_tutorial/`. Then check out `2_examples/` and maybe run a couple.
 
 To run anything, you run it like an ordinary JavaScript file: `node file.js`
 
