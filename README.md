@@ -16,9 +16,11 @@
 * Has a fun theme around magic :D
 * Can possibly make you feel like a young programmer again? :ooo
 
-## Demo
+## Demos
 
-[There'll be a demo here shortly]
+* Overview: https://youtu.be/kqYgkv2R5Ig
+* Gear case study: https://youtu.be/mS1kLKEyC1g
+* Surface level details: https://youtu.be/o58s1bPI1ZA
 
 ## Installation
 
