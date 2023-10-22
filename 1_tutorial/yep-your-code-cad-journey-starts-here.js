@@ -19,7 +19,7 @@ const { circle, rectangle } = require("../3_summonscript");
 
 // Here we make a circle of diameter 1; a rectangle of width 6, length 2;
 // and finally we "union them", which simply combines them together!
-const stuff = circle(1).union(rectangle([6, 2]));
+const stuff = circle(1).union(rectangle.exact([6, 2]));
 
 // (Note: things like sketching are possible too, but they're not well supported
 // in SummonScript currently.)
@@ -27,7 +27,7 @@ const stuff = circle(1).union(rectangle([6, 2]));
 // Simple so far right? Already you see the general style of how to compose
 // SummonScripts. Let's move the rectangle a little to the right (x-axis) so
 // it's not completely hiding the circle.
-const stuff2 = circle(1).union(rectangle[6, 2]).move([3, 0, 0]));
+const stuff2 = circle(1).union(rectangle.exact([6, 2]).move([3, 0, 0]));
 
 // Let's bring the 2D object into 3D space.
 // The parameters may seem odd, but it's the start and end of how to "stretch
@@ -44,10 +44,10 @@ const stuff3d = stuff2.extrudeZ(0, 1);
 // to see, since you can write fractal SummonScripts with infinite detail.
 // Progressive rendering keeps things responsive while continuing to render
 // more detail as you think and work.
-// Viewer.upload(stuff3d, [[-3,-3,-3],[3,3,3]], 1, 4);
+// Viewer.upload(stuff3d, [[-6,-6,-6],[6,6,6]], 1, 4);
 
 // Or we can save it to the common 3D STL file format:
-// saveAs.stl(stuff3d, [[-3, -3, -3],[3,3,3]], 4);
+// saveAs.stl(stuff3d, [[-6, -6, -6],[6,6,6]], 4);
 
 // There are many other transforms other than extrudeZ. Check out lib/transform.js
 // or value.js for more!
@@ -56,13 +56,15 @@ const { box, repeatRadial } = require("../3_summonscript");
 // This will repeat a twisted box 9 times across a circle of radius 3.
 // It's radius 3 because we move the box to the right 3 units, and repeatRadial
 // copies it in a circular path.
-const thing = repeatRadial(box.twist(1).move([3, 0, 0]), 9);
-// Viewer.upload(thing, [[-6,-6,-6],[3,3,3]], 1, 4)
+const thing = repeatRadial(box.exact([1, 1, 1]).twist(1).move([5, 0, 0]), 20);
+// Viewer.upload(thing, [[-6,-6,-6],[6,6,6]], 1, 10)
 
 // And honestly, that's pretty much it! From here, we can really go HAM and
 // create a small scene with a moving sphere, cube and text.
 
 // Scroll to the bottom and uncomment fn(0);
+
+const { print2d, sphere } = require("../3_summonscript");
 
 const model = (t) => {
   const wave = Math.sin(t/360 * 2*Math.PI);
@@ -76,7 +78,7 @@ const model = (t) => {
   const cube = box.exact([0.5, 0.5, 0.5])
     .move(ballPosition.add([0.5, 0, 1*wave]));
 
-  return text.union(ball).unionBlend(cube, 0.5)
+  return text.union(ball).unionSmooth(cube, 0.5)
 };
 
 const res = 5;
@@ -94,6 +96,9 @@ const fn = (t) => {
 
 // Hey! Over here!
 // fn(0);
+
+// Or you can uncomment this to see one "frame"
+Viewer.upload(model(60), boundingBox, 15, 15)
 
 // At this point, explore the project and find what functions may trigger
 // some ideas. Put them together. Play. Ask questions. Join us.
