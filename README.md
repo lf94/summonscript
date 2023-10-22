@@ -76,15 +76,10 @@ If you want more personal communication, come see us in
 
 ## Calling all math wizards and math witches
 
-I need your help. SDFs are a difficult subject for me. In particular, it is
-difficult to create SDF code for sketching. At the least we need to be able
-to combine lines, arcs, and beziers. I will help you in any way I can with the
-system, but the actual math is out of my reach. Thank you for reading my plea.
-
-Of course, if you come up with any other SDFs to add to SummonScript I would
-love to merge them in. You will see my threshold for merging is very liberal.
-I care most of all that code CAD is successful, and I need all the help I can
-get my hands on.
+SDFs are not easy. If you come up with any useful SDFs please consider
+contributing them! I would love to merge them in. You will see my threshold for
+merging is very liberal. I care most of all that code CAD is successful, and I
+need all the help I can get my hands on.
 
 ## Background
 
