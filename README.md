@@ -16,6 +16,12 @@
 * Has a fun theme around magic :D
 * Can possibly make you feel like a young programmer again? :ooo
 
+## Screenshots
+
+![Repeating cubes in a circle](/repeat.png)
+![A gear](/gear.png)
+![A sphere with surface details](/gyroid.png)
+
 ## Demos
 
 * Overview: https://youtu.be/kqYgkv2R5Ig
