@@ -32,5 +32,5 @@ const baseWithCubes = baseCut
 .union(cube.move([6.4*cm/2-d.lipThickness/2 - (cubeL+d.cubeSpacing)*3, (cubeL+d.cubeSpacing)*-6, (d.h+0.4*cm)/-2 - d.cubeHole/2]))
 
 const bb = [20*cm, 20*cm, 20*cm];
-saveAs.stl(baseWithCubes, [bb.mul(-1), bb], 0.4, "out.stl");
-// Viewer.upload(baseWithCubes, [bb.mul(-1), bb], 0.4, 0.8);
+// saveAs.stl(baseWithCubes, [bb.mul(-1), bb], 0.4, "out.stl");
+Viewer.upload(baseWithCubes, [bb.mul(-1), bb], 0.4, 2.8);

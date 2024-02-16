@@ -97,19 +97,16 @@ const rectangle = {
 };
 exports.rectangle = rectangle;
 
-const box = {
-  exact(b$) {
-    return rectangle.exact(b$.slice(0, 2))
-      .extrudeZ(b$[2]/-2, b$[2]/2);
-  },
-  roundedZ(b$, r) {
-    return rectangle
-      .roundedZ(b$.slice(0, 2), r)
-      .extrudeZ(b$[2]/-2, b$[2]/2);
-  }
+const box = (wlh) => {
+  const xyz = XYZ();
+ //  vec3 q = abs(p) - b;
+ //  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+  const q = abs(xyz).sub(wlh.div(2)).value;
+  const m = max(q, [0,0,0]);
+  return length(m).add(min(max(q[0], max(q[1], q[2])), 0.0));
 };
-const cube = box;
 exports.box = box;
+const cube = box;
 exports.cube = cube;
 
 const gyroid = () => { 

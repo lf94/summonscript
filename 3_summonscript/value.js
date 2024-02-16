@@ -27,7 +27,12 @@ class Value {
   intersection($b) { return max(this, $b); }
   difference($b) { return this.intersection(neg($b)); }
 
-  unionSmooth($b, $m) { return blend.smooth(this, $b, $m); }
+  unionSmooth($b, $m) { return unionSmooth(this, $b, $m); }
+  differenceSmooth($b, $m) { return differenceSmooth(this, $b, $m); }
+
+  unionRound($b, $m) { return unionRound(this, $b, $m); }
+  intersectionRound($b, $m) { return intersectionRound(this, $b, $m); }
+  differenceRound($b, $m) { return differenceRound(this, $b, $m); }
 
   remap($xyz) { return remap(this, $xyz); }
   move($base) { return move(this, $base); }
@@ -46,7 +51,7 @@ class Value {
   revolveY() { return revolveY(this); }
   taperXYAlongZ($base, $height, $scale, $baseScale) { return taperXYAlongZ(this, $base, $height, $scale, $baseScale); }
   twist($amount) { return twist(this, $amount); }
-  offset($offset) { return this.sub($offset); }
+  offset($normal, $offset) { return offset(this, $normal, $offset); }
   clearance($a, $b, $offset) { return clearance (this, $a, $b, $offset); }
   shell($offset) { return shell(this, $offset); }
 
@@ -91,6 +96,7 @@ const {
 const {
   remap,
   move,
+  offset,
   elongate,
   scaleX,
   scaleY,
@@ -108,5 +114,9 @@ const {
   twist,
   clearance,
   shell,
-  blend
+  unionSmooth,
+  differenceSmooth,
+  unionRound,
+  intersectionRound,
+  differenceRound,
 } = require("./lib/transform");

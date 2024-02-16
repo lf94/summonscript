@@ -1,7 +1,7 @@
 const { libfive_tree_remap, libfive_tree_x, libfive_tree_y, libfive_tree_z }  = require("../koffi/libfive");
 const { toLibfiveTreeConst }  = require("../libfive-helper");
 const { Value } = require("../value");
-const { abs, min, max, neg, sqrt, XYZ, cos, sin } = require("./math");
+const { abs, min, max, neg, sqrt, XYZ, cos, sin, clamp, mix, length } = require("./math");
 
 const remap = ($shape, $xyz)  => {
   const xyz = Value.unwrap($xyz);
@@ -21,9 +21,9 @@ const move = ($shape, $base) => {
 };
 exports.move = move;
 
-const elongate = ($shape, $xy)  => {
+const elongate = ($shape, $xyz)  => {
   const xyz = XYZ();
-  const q = Value.unwrap(abs(xyz).sub($xy));
+  const q = Value.unwrap(abs(xyz).sub($xyz.div(2)));
   const q2 = [max(q[0], 0), max(q[1], 0), max(q[2], 0)];
   return $shape.remap([q2[0], q2[1], q2[2]]).add(min(max(q[0],max(q[1],q[2])),0.0));
 };
@@ -153,23 +153,33 @@ exports.clearance = clearance;
 const shell = ($shape, $o) => clearance($shape, $shape, neg(abs($o)));
 exports.shell = shell;
 
-const blend = {
-  smooth: (a, b, m) => {
-    const $m = new Value(m);
-    const h = max($m.sub(abs(a.sub(b))), 0.0).div($m);
-    return min(a,b).sub(h.mul(h).mul($m).mul(1.0/4.0));
-  },
-  smooth2: (d1, d2, k) => {
-    const $0_5 = new Value(0.5);
-    const $1_0 = new Value(1.0);
-    const h = clamp($0_5.add($0_5.mul(d2.sub(d1)).div(k)), 0.0, 1.0);
-    return mix(d2,d1,h).sub(k.mul(h).mul($1_0.sub(h)));
-  },
-  difference2: (d1, d2, k) => {
-    const $0_5 = new Value(0.5);
-    const $1_0 = new Value(1.0);
-    const h = clamp($0_5.sub($0_5.mul(d2.add(d1)).div(k)), 0.0, 1.0);
-    return mix(h, d2, neg(d1)).add(k.mul(h).mul($1_0.sub(h)));
-  },
+const unionSmooth = (a, b, m) => {
+  const $m = new Value(m);
+  const h = max($m.sub(abs(a.sub(b))), 0.0).div($m);
+  return min(a,b).sub(h.mul(h).mul($m).mul(1.0/4.0));
 };
-module.exports.blend = blend;
+module.exports.unionSmooth = unionSmooth;
+
+const differenceSmooth = (d1, d2, k) => {
+  return unionSmooth(d1.neg(), d2, k).neg();
+};
+module.exports.differenceSmooth = differenceSmooth;
+
+const unionRound = ($a, $b, $r) => {
+  const r = new Value($r);
+  const u = max([r.sub($a), r.sub($b)], [0, 0]);
+  return max(r, min($a, $b)).sub(length(u));
+};
+module.exports.unionRound = unionRound;
+
+const intersectionRound = ($a, $b, $r) => {
+  const r = new Value($r);
+  const u = max([r.add($a), r.add($b)], [0, 0]);
+  return min(r.neg(), max($a, $b)).add(length(u));
+};
+module.exports.intersectionRound = intersectionRound;
+
+const differenceRound = ($a, $b, $r) => {
+  return intersectionRound($a, $b.neg(), $r);
+};
+module.exports.differenceRound = differenceRound;

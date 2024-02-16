@@ -82,7 +82,7 @@ exports.step = step;
 
 const mix = ($a, $b, $h) => new Value($b).mul($h)
   .add(
-    new Value($a).mul(toValue(1).sub($h))
+    new Value($a).mul(new Value(1).sub($h))
   );
 exports.mix = mix;
 

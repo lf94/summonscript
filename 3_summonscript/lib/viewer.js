@@ -23,6 +23,7 @@ const Viewer = {
         // Don't bother trying to render anything.
         if (mesh.tri_count < 3) {
           console.log("Not enough triangles to render: " + mesh.tri_count);
+          client.destroy();
           return Promise.reject();
         }
 
