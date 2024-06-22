@@ -1,7 +1,18 @@
-const { length, atan2, floor, cos, sin, neg, min, XYZ } = require("./math");
+const { Value } = require("../value");
+const { div, clamp, sign, round, length, atan2, floor, cos, sin, neg, min, XYZ } = require("./math");
 
 // https://iquilezles.org/articles/sdfrepetition/
 // I am just a code monkey.
+
+// iq: limited repetition - ONLY WORKS FOR SYMMETRIC SHAPES
+const limitedRepeatedSymmetricOnly = (shape, s, lima, limb) => {
+  const $p = new Value(XYZ());
+  const _1 = $p.div(s);
+  const id = clamp(round(_1), neg(lima), limb);
+  const r = $p.sub(id.mul(s));
+  return shape.remap(r);
+}
+exports.limitedRepeatedSymmetricOnly = limitedRepeatedSymmetricOnly;
 
 // You'll want to use this more often than not.
 const repeatRadial = (shape, cells) => {

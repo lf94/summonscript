@@ -1,7 +1,7 @@
 const { libfive_tree_remap, libfive_tree_x, libfive_tree_y, libfive_tree_z }  = require("../koffi/libfive");
 const { toLibfiveTreeConst }  = require("../libfive-helper");
 const { Value } = require("../value");
-const { abs, min, max, neg, sqrt, XYZ, cos, sin, clamp, mix, length } = require("./math");
+const { atan, atan2, abs, min, max, neg, sqrt, XYZ, cos, sin, clamp, mix, length } = require("./math");
 
 const remap = ($shape, $xyz)  => {
   const xyz = Value.unwrap($xyz);
@@ -183,3 +183,35 @@ const differenceRound = ($a, $b, $r) => {
   return intersectionRound($a, $b.neg(), $r);
 };
 module.exports.differenceRound = differenceRound;
+
+const cheapBend = (shape, k) => {
+  const [X,Y,Z] = XYZ();
+  const c = cos(X.mul(k));
+  const s = sin(X.mul(k));
+  const q = [
+    c.mul(X).add(neg(s).mul(Y)), 
+    s.mul(X).add(c.mul(Y)),
+    Z,
+  ];
+  return shape.remap(q);
+}
+module.exports.cheapBend = cheapBend;
+
+const bendBackle = (shape, c, k) => {
+  const [X,Y,Z] = XYZ();
+  let y = Y.sub(c[0]);
+  let z = Z.sub(c[1]);
+  //to polar coordinates
+  let ang = atan2(y, z);
+  const len = length([y,z]);
+  //warp angle with sigmoid function
+  ang = ang.sub(ang.div(sqrt(new Value(1).add(ang.mul(ang)))).mul(new Value(1).sub(k)));
+  //to cartesian coordiantes
+  const pn = [
+    X,
+    sin(ang).mul(len).add(c[0]),
+    cos(ang).mul(len).add(c[1]),
+  ];
+  return shape.remap(pn);
+};
+module.exports.bendBackle = bendBackle;

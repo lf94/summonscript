@@ -6,7 +6,7 @@
 const { Value } = require("../value");
 
 const {
-  min, max, length, cos, sin, mix, clamp, Vec2, neg, abs, sqrt, XYZ
+  dot, gt, min, max, length, cos, sin, mix, clamp, Vec2, neg, abs, sqrt, XYZ
 } = require("./math");
 
 // Remember, a big positive value is "outside"
@@ -114,3 +114,25 @@ const gyroid = () => {
   return cos(x).mul(sin(y)).add(cos(y).mul(sin(z))).add(cos(z).mul(sin(x)));
 };
 exports.gyroid = gyroid;
+
+const torus = (t) => {
+  const [x,y,z] = XYZ();
+  const q = [length([x,z]).sub(t[0]), y];
+  return length(q).sub(t[1]);
+}
+exports.torus = torus;
+
+const cappedTorus = (ang, _ra, _rb) => {
+  const [x,y,z] = XYZ();
+  const nx = abs(x);
+  const ra = new Value(_ra);
+  const rb = new Value(_rb);
+  const sc = [sin(ang/2), cos(ang/2)];
+
+  const a = gt(new Value(sc[1]).mul(nx), new Value(sc[0]).mul(y));
+  const b = gt(new Value(sc[0]).mul(y),  new Value(sc[1]).mul(nx));
+  const k = max(a.mul(dot([nx, y], sc)), b.mul(length([nx, y])));
+
+  return sqrt(dot([nx,y,z],[nx,y,z]).add(ra.mul(ra)).sub(new Value(2.0).mul(ra).mul(k))).sub(rb);
+}
+exports.cappedTorus = cappedTorus;

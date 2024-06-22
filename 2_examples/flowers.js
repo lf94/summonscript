@@ -12,4 +12,4 @@ for (let i = 2; i < 10; i++) {
 
 
 const bb = [20, 20, 20];
-Viewer.upload(result, [bb.mul(-1), bb], 1, 2);
+Viewer.upload(result, [bb.mul(-1), bb], 1, 1);

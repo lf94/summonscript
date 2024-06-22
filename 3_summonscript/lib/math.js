@@ -66,6 +66,8 @@ exports.mag = mag;
 
 const floor = ($n) => $n.sub($n.mod(1));
 exports.floor = floor;
+const ceil = ($n) => $n.add(new Value(1).sub($n.mod(1))).sub(1);
+exports.ceil = ceil;
 const round = ($n) => floor($n.add(0.5));
 exports.round = round;
 
@@ -97,6 +99,11 @@ const dot = ($a, $b) => {
 exports.dot = dot;
 const dot2 = ($v) => $v.dot($v);
 exports.dot2 = dot2;
+
+const gt = (a, b) => {
+  return max(sign(a.sub(b)), 0);
+};
+exports.gt = gt;
 
 const Region3 = (min, max) => {
   return {
