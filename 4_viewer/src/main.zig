@@ -383,7 +383,7 @@ pub fn main() !void {
   // equiv. to RGBA
   var ambient_value: raylib.Vector4 = .{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.0 };
 
-  var ambient_loc = raylib.GetShaderLocation(shader, "ambient");
+  const ambient_loc = raylib.GetShaderLocation(shader, "ambient");
   raylib.SetShaderValue(shader, ambient_loc, &ambient_value, raylib.SHADER_UNIFORM_VEC4);
 
   // Assigning the return value would be used for say, rendering a sphere that
@@ -448,24 +448,13 @@ pub fn main() !void {
   var annotations = std.ArrayList(Annotation).init(std.heap.raw_c_allocator);
   var target_annotation_index: u32 = 0;
 
-  var server = std.net.StreamServer.init(.{});
-  defer server.deinit();
-
   const SOCKET_PATH = "/tmp/libfive_mesh.sock";
 
-  // Make sure the file doesn't exist before or after.
-  std.fs.cwd().deleteFile(SOCKET_PATH) catch {};
-  const socket_address = try std.net.Address.initUnix(SOCKET_PATH);
-  defer std.fs.cwd().deleteFile(SOCKET_PATH) catch {};
+  const unixSocket = try std.net.Address.initUnix(SOCKET_PATH);
+  var server = try std.net.Address.listen(unixSocket, .{});
+  defer server.deinit();
 
-  try server.listen(socket_address);
-  const sockfd = server.sockfd.?;
-
-  // Set the non-blocking flag (and avoid overwriting the other set flags)
-  const flags = fcntl.fcntl(sockfd, fcntl.F_GETFL);
-  _ = fcntl.fcntl(sockfd, fcntl.F_SETFL, flags | fcntl.O_NONBLOCK);
-
-  var connection_maybe: ?std.net.StreamServer.Connection = null;
+  var connection_maybe: ?std.net.Server.Connection = null;
 
   while (!raylib.WindowShouldClose() and state != .shutdown) {
     
@@ -526,11 +515,11 @@ pub fn main() !void {
       switch (state) {
         .wait_command => {
           var accepted_addr: std.net.Address = undefined;
-          var adr_len: std.os.socklen_t = @sizeOf(std.net.Address);
-          const accept_result = std.c.accept(server.sockfd.?, &accepted_addr.any, &adr_len);
+          var adr_len: std.posix.socklen_t = @sizeOf(std.net.Address);
+          const accept_result = std.c.accept(server.stream.handle, &accepted_addr.any, &adr_len);
           if (connection_maybe != null) { break :out; }
           if (accept_result >= 0) {
-            connection_maybe = std.net.StreamServer.Connection{
+            connection_maybe = std.net.Server.Connection{
               .stream = std.net.Stream{ .handle = @intCast(accept_result) },
               .address = accepted_addr,
             };
@@ -582,7 +571,7 @@ pub fn main() !void {
         // Vertices come in triplets. raylib can only hold 16-bit amount of indices.
         // So we avoid them.
         .read_vertices => {
-          var bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
+          const bytes_read = try connection_maybe.?.stream.reader().read(&buffers.xyz_coords);
 
           try mesh.vertices.?.appendSlice(buffers.xyz_coords[0..bytes_read]);
           if ((mesh.vertices.?.items.len / 4 / 3) != mesh.vertexCount) continue;
@@ -681,7 +670,7 @@ pub fn main() !void {
           const annotation = &annotations.items[target_annotation_index];
 
           const text = try std.heap.c_allocator.alloc(u8, bytes_read);
-          std.mem.copy(u8, text, buffers.text[0..bytes_read]);
+          std.mem.copyForwards(u8, text, buffers.text[0..bytes_read]);
           annotation.text = text;
 
           try stdout.print("read_annotation_text -> wait_command \n", .{});
