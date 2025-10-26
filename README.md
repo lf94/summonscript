@@ -56,7 +56,7 @@ You're going to want to start the viewer first so you can see something.
 
 The default view is just a white window.
 
-Head on over to `1_tutorial/`. Then check out `2_examples/` and maybe run a couple.
+Head on over to `1_tutorial/`. Then check out `2_models/` and maybe run a couple.
 
 To run anything, you run it like an ordinary JavaScript file: `node file.js`
 
