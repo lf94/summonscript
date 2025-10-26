@@ -163,31 +163,31 @@ const unionSmooth = (a, b, m) => {
   const h = max($m.sub(abs(a.sub(b))), 0.0).div($m);
   return min(a,b).sub(h.mul(h).mul($m).mul(1.0/4.0));
 };
-module.exports.unionSmooth = unionSmooth;
+exports.unionSmooth = unionSmooth;
 
 const differenceSmooth = (d1, d2, k) => {
   return unionSmooth(d1.neg(), d2, k).neg();
 };
-module.exports.differenceSmooth = differenceSmooth;
+exports.differenceSmooth = differenceSmooth;
 
 const unionRound = ($a, $b, $r) => {
   const r = new Value($r);
   const u = max([r.sub($a), r.sub($b)], [0, 0]);
   return max(r, min($a, $b)).sub(length(u));
 };
-module.exports.unionRound = unionRound;
+exports.unionRound = unionRound;
 
 const intersectionRound = ($a, $b, $r) => {
   const r = new Value($r);
   const u = max([r.add($a), r.add($b)], [0, 0]);
   return min(r.neg(), max($a, $b)).add(length(u));
 };
-module.exports.intersectionRound = intersectionRound;
+exports.intersectionRound = intersectionRound;
 
 const differenceRound = ($a, $b, $r) => {
   return intersectionRound($a, $b.neg(), $r);
 };
-module.exports.differenceRound = differenceRound;
+exports.differenceRound = differenceRound;
 
 const cheapBend = (shape, k) => {
   const [X,Y,Z] = XYZ();
@@ -200,7 +200,7 @@ const cheapBend = (shape, k) => {
   ];
   return shape.remap(q);
 }
-module.exports.cheapBend = cheapBend;
+exports.cheapBend = cheapBend;
 
 const bendBackle = (shape, c, k) => {
   const [X,Y,Z] = XYZ();
@@ -219,4 +219,23 @@ const bendBackle = (shape, c, k) => {
   ];
   return shape.remap(pn);
 };
-module.exports.bendBackle = bendBackle;
+exports.bendBackle = bendBackle;
+
+const waveOffsetXY = ($shape, frequency, amplitude) => {
+  const [X,Y,Z] = XYZ();
+  const ang = atan2(Y, X).mul(frequency)
+  const xn = cos(ang).mul(amplitude);
+  const yn = sin(ang).mul(amplitude);
+  return $shape.remap([X.sub(xn), Y.sub(yn), Z]);
+}
+exports.waveOffsetXY = waveOffsetXY;
+
+const waveOffsetUniform = ($shape, freq, amplitude) => {
+  const [X,Y,Z] = XYZ();
+  const ang = atan2(Y, X);
+  const xn = cos(ang.mul(freq)).mul(amplitude).value;
+  const yn = sin(ang.mul(freq)).mul(amplitude).value;
+  const zn = sin(Z.mul(freq)).mul(amplitude).value;
+  return $shape.remap([X.sub(xn), Y.sub(yn), Z]).sub(zn);
+}
+exports.waveOffsetUniform = waveOffsetUniform;

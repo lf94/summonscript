@@ -6,7 +6,7 @@
 const { Value } = require("../value");
 
 const {
-  dot, gt, min, max, length, cos, sin, mix, clamp, Vec2, neg, abs, sqrt, XYZ
+  dot, gt, min, max, length, cos, sin, mix, clamp, sign, Vec2, neg, abs, sqrt, XYZ
 } = require("./math");
 
 // Remember, a big positive value is "outside"
@@ -136,3 +136,15 @@ const cappedTorus = (ang, _ra, _rb) => {
   return sqrt(dot([nx,y,z],[nx,y,z]).add(ra.mul(ra)).sub(new Value(2.0).mul(ra).mul(k))).sub(rb);
 }
 exports.cappedTorus = cappedTorus;
+
+const hexagon = (_d) => {
+  const r = _d / 2.0;
+  const [X,Y,_Z] = XYZ()
+  let p = [X,Y]
+  const k = [-0.866025404, 0.5, 0.577350269];
+  p = abs(p);
+  p = p.sub(min(dot(k.slice(0, 2), p), 0.0).mul(k.slice(0, 2)).mul(2.0));
+  p = p.sub([clamp(p.value[0], -k[2]*r, k[2]*r), r]);
+  return length(p).mul(sign(p.value[1]));
+}
+exports.hexagon = hexagon;
