@@ -2,7 +2,7 @@
 // This explains an egg is basiclly an intersection of 4 circles.
 // We copy this method, but then do a revolution to bring it into 3D.
 
-const { circle, halfSpace, Viewer } = require("../3_summonscript");
+const { circle, halfSpace } = require("./shapes");
 
 // The egg is parameterized by it's bottom radius
 const egg = (d) => {
@@ -25,4 +25,4 @@ const egg = (d) => {
     .revolveY();
 };
 
-Viewer.upload(egg(1), [[-10, -10, -10], [10,10,10]], 5, 20);
+exports.egg = egg;

@@ -1,4 +1,6 @@
 const { libfive_tree_remap, libfive_tree_x, libfive_tree_y, libfive_tree_z }  = require("../koffi/libfive");
+// Add more as needed for performance.
+const { offset: libfiveOffset, clearance: libfiveClearance }  = require("../koffi/libfive-stdlib");
 const { toLibfiveTreeConst }  = require("../libfive-helper");
 const { Value } = require("../value");
 const { atan, atan2, abs, min, max, neg, sqrt, XYZ, cos, sin, clamp, mix, length } = require("./math");
@@ -89,21 +91,21 @@ const rotateZ = ($shape, angle, center = [0, 0, 0]) => {
 };
 exports.rotateZ = rotateZ;
 
-const reflectX = ($shape, x0) => {
+const reflectX = ($shape, $x0) => {
   const [x,y,z] = XYZ();
-  return $shape.remap([x0.mul(2).sub(x), y, z]);
+  return $shape.remap([new Value($x0).mul(2).sub(x), y, z]);
 };
 exports.reflectX = reflectX;
 
-const reflectY = ($shape, y0) => {
+const reflectY = ($shape, $y0) => {
   const [x,y,z] = XYZ();
-  return $shape.remap([x, y0.mul(2).sub(y), z]);
+  return $shape.remap([x, new Value($y0).mul(2).sub(y), z]);
 };
 exports.reflectY = reflectY;
 
-const reflectZ = ($shape, z0) => {
+const reflectZ = ($shape, $z0) => {
   const [x,y,z] = XYZ();
-  return $shape.remap([x, y, z0.mul(2).sub(z)]);
+  return $shape.remap([x, y, new Value(z0).mul(2).sub(z)]);
 };
 exports.reflectZ = reflectZ;
 
@@ -147,7 +149,10 @@ const twist = ($shape, $amount) => {
 };
 exports.twist = twist;
 
-const clearance = ($a, $b, $o) => $a.difference($b.offset($o));
+const offset = ($a, o) => new Value(libfiveOffset($a, toLibfiveTreeConst(o)));
+exports.offset = offset;
+
+const clearance = ($a, $b, $o) => libfiveClearance($a.value, $b.value, $o.value);
 exports.clearance = clearance;
 
 const shell = ($shape, $o) => clearance($shape, $shape, neg(abs($o)));

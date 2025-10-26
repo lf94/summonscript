@@ -44,5 +44,5 @@ const result = container
 
 const bb = face.add(20);
 
-Viewer.upload(result, [bb.mul(-1), bb], 1, 2);
-//saveAs.stl(result, [bb.mul(-1), bb], 3, "casio-a168-holder.stl");
+// Viewer.upload(result, [bb.mul(-1), bb], 1, 2);
+saveAs.stl(result, [bb.mul(-1), bb], 3, "casio-a168-holder.stl");

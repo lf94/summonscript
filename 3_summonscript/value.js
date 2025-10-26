@@ -51,7 +51,7 @@ class Value {
   revolveY() { return revolveY(this); }
   taperXYAlongZ($base, $height, $scale, $baseScale) { return taperXYAlongZ(this, $base, $height, $scale, $baseScale); }
   twist($amount) { return twist(this, $amount); }
-  offset($normal, $offset) { return offset(this, $normal, $offset); }
+  offset($offset) { return offset(this.value, $offset); }
   clearance($a, $b, $offset) { return clearance (this, $a, $b, $offset); }
   shell($offset) { return shell(this, $offset); }
 
@@ -77,6 +77,7 @@ class Value {
 };
 exports.Value = Value;
 
+// These MUST BE LEFT AFTER `class Value`.
 // Include these here so when Value.methods are invoked, these symbols will be
 // resolved. This avoids a cyclic dependency.
 const {
@@ -120,3 +121,4 @@ const {
   intersectionRound,
   differenceRound,
 } = require("./lib/transform");
+

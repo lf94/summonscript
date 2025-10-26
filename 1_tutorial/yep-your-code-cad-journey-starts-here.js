@@ -56,7 +56,7 @@ const { box, repeatRadial } = require("../3_summonscript");
 // This will repeat a twisted box 9 times across a circle of radius 3.
 // It's radius 3 because we move the box to the right 3 units, and repeatRadial
 // copies it in a circular path.
-const thing = repeatRadial(box.exact([1, 1, 1]).twist(1).move([5, 0, 0]), 20);
+const thing = repeatRadial(box([1, 1, 1]).twist(1).move([5, 0, 0]), 20);
 // Viewer.upload(thing, [[-6,-6,-6],[6,6,6]], 1, 10)
 
 // And honestly, that's pretty much it! From here, we can really go HAM and
@@ -75,7 +75,7 @@ const model = (t) => {
 
   const ballPosition = [-1*wave, 1, 1];
   const ball = sphere(0.5).move(ballPosition);
-  const cube = box.exact([0.5, 0.5, 0.5])
+  const cube = box([0.5, 0.5, 0.5])
     .move(ballPosition.add([0.5, 0, 1*wave]));
 
   return text.union(ball).unionSmooth(cube, 0.5)
@@ -95,10 +95,10 @@ const fn = (t) => {
 };
 
 // Hey! Over here!
-// fn(0);
+fn(0);
 
 // Or you can uncomment this to see one "frame"
-Viewer.upload(model(60), boundingBox, 15, 15)
+// Viewer.upload(model(60), boundingBox, 15, 15)
 
 // At this point, explore the project and find what functions may trigger
 // some ideas. Put them together. Play. Ask questions. Join us.

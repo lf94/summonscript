@@ -6,6 +6,10 @@ const X = () => new Value(libfive_tree_x());
 const Y = () => new Value(libfive_tree_y());
 const Z = () => new Value(libfive_tree_z());
 
+exports.X = X;
+exports.Y = Y;
+exports.Z = Z;
+
 const XYZ = () => [X(),Y(),Z()];
 exports.XYZ = XYZ;
 

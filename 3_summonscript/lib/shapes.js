@@ -97,13 +97,13 @@ const rectangle = {
 };
 exports.rectangle = rectangle;
 
-const box = (wlh) => {
+const box = (wlh, r = 0) => {
   const xyz = XYZ();
  //  vec3 q = abs(p) - b;
  //  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
   const q = abs(xyz).sub(wlh.div(2)).value;
   const m = max(q, [0,0,0]);
-  return length(m).add(min(max(q[0], max(q[1], q[2])), 0.0));
+  return length(m).add(min(max(q[0], max(q[1], q[2])), 0.0)).sub(r);
 };
 exports.box = box;
 const cube = box;
